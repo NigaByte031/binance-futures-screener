@@ -176,7 +176,7 @@ if [ "$DO_UNINSTALL" = "1" ]; then
   fi
   $SUDO rm -f "/etc/systemd/system/${SERVICE_NAME}.service"
   have systemctl && $SUDO systemctl daemon-reload || true
-  $SUDO rm -f "/etc/nginx/conf.d/${SERVICE_NAME}.conf"
+  $SUDO rm -f "/etc/nginx/conf.d/${SERVICE_NAME}.conf" "/etc/nginx/http.d/${SERVICE_NAME}.conf"
   have nginx && $SUDO nginx -t >/dev/null 2>&1 && $SUDO systemctl reload nginx 2>/dev/null || true
   $SUDO rm -rf "${OPT_DIR:-$DEFAULT_DIR}"
   if id -u "$SERVICE_USER" >/dev/null 2>&1; then
@@ -228,8 +228,16 @@ fi
 USE_SSL="${USE_SSL:-0}"
 
 if [ "$USE_SSL" = "1" ] && [ -z "$SSL_EMAIL" ]; then
-  ask SSL_EMAIL "ایمیل برای Let's Encrypt" ""
-  [ -n "$SSL_EMAIL" ] || die "برای SSL ایمیل لازم است (یا از --no-ssl استفاده کنید)."
+  if [ "$ASSUME_YES" = "1" ] || [ "$TTY_READY" = "0" ]; then
+    warn "بدون ایمیل نمی‌توان گواهی Let's Encrypt گرفت؛ SSL رد شد."
+    USE_SSL=0
+  else
+    ask SSL_EMAIL "ایمیل برای Let's Encrypt" ""
+    if [ -z "$SSL_EMAIL" ]; then
+      warn "ایمیل خالی بود؛ SSL رد شد."
+      USE_SSL=0
+    fi
+  fi
 fi
 
 INSTALL_DIR="${OPT_DIR:-$DEFAULT_DIR}"
@@ -237,8 +245,8 @@ INSTALL_DIR="${OPT_DIR:-$DEFAULT_DIR}"
 
 # soft check: is the port already in use by something else?
 if have ss && $SUDO ss -ltn 2>/dev/null | awk '{print $4}' | grep -Eq "[:.]${PORT}$"; then
-  warn "پورت ${PORT} همین حالا اشغال است؛ اگر سرویس دیگری روی آن باشد نصب شکست می‌خورد."
-  if ! ask_yn "با همین پورت ادامه می‌دهیم؟" n; then die "پورت دیگری انتخاب کنید."; fi
+  warn "پورت ${PORT} همین حالا اشغال است (اگر نصب قبلی همین برنامه است، مشکلی نیست)."
+  if ! ask_yn "با همین پورت ادامه می‌دهیم؟" y; then die "پورت دیگری انتخاب کنید."; fi
 fi
 
 # summary + confirm
@@ -388,7 +396,12 @@ fi
 # 6) NGINX
 # ============================================================
 if [ "$USE_NGINX" = "1" ]; then
-  NGINX_CONF="/etc/nginx/conf.d/${SERVICE_NAME}.conf"
+  if [ -d /etc/nginx/http.d ]; then
+    NGINX_CONF="/etc/nginx/http.d/${SERVICE_NAME}.conf"   # Alpine
+  else
+    $SUDO mkdir -p /etc/nginx/conf.d
+    NGINX_CONF="/etc/nginx/conf.d/${SERVICE_NAME}.conf"   # Debian / RHEL
+  fi
   SERVER_NAME="${DOMAIN:-_}"
   $SUDO tee "$NGINX_CONF" >/dev/null <<NGINX_EOF
 # Binance Futures Screener - managed by install.sh
