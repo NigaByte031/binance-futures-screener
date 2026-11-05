@@ -1,0 +1,12 @@
+services:
+  screener:
+    build: .
+    image: binance-futures-screener:latest
+    container_name: binance-screener
+    restart: unless-stopped
+    # پورت سمت چپ را به دلخواه عوض کنید: "8080:8080"
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - BIND=0.0.0.0

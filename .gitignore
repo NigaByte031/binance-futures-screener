@@ -1,0 +1,17 @@
+# OS / editor junk
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# logs
+*.log
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# local env
+.env
