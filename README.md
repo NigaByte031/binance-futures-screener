@@ -4,6 +4,8 @@
 
 ![پیش‌نمایش](docs/preview.png)
 
+**نسخه آنلاین (بدون نصب):** https://nigabyte031.github.io/binance-futures-screener/
+
 ---
 
 ## نصب با یک دستور
