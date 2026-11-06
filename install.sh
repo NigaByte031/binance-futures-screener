@@ -573,7 +573,10 @@ else
     || download "https://github.com/${REPO}/archive/refs/heads/${BRANCH}.tar.gz" "$TARBALL" \
     || die "دانلود سورس از GitHub ناموفق بود. اتصال شبکه/پراکسی را بررسی کنید."
   mkdir -p "$TMP_DIR/src"
-  tar -xzf "$TARBALL" -C "$TMP_DIR/src" --strip-components=1 || die "استخراج آرشیو ناموفق بود."
+  # extract with a relative path: GNU tar treats "host:path" as a remote archive,
+  # which breaks when TMPDIR contains a colon
+  ( cd "$TMP_DIR" && tar -xzf "src.tar.gz" -C "src" --strip-components=1 ) \
+    || die "استخراج آرشیو ناموفق بود."
   SRC_DIR="$TMP_DIR/src"
   [ -f "$SRC_DIR/index.html" ] || die "سورس دانلود شد ولی index.html داخلش نبود."
   ok "سورس از GitHub دریافت شد"
