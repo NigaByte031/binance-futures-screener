@@ -379,6 +379,62 @@ thead th small{font-size:9px;color:var(--txt-3);font-weight:600;margin-inline-st
 .more:hover{border-color:var(--brand);color:var(--brand)}
 
 /* ============================================================
+   Watchlist / checklist
+   ============================================================ */
+.btn .badge{
+  min-width:18px;height:18px;padding:0 5px;border-radius:99px;flex:0 0 auto;
+  display:inline-flex;align-items:center;justify-content:center;
+  font-size:10px;font-weight:800;line-height:1;direction:ltr;
+  background:var(--surface-3);color:var(--txt-2);border:1px solid var(--border);
+  transition:background .15s,color .15s,border-color .15s;
+}
+#btnWatch.active{
+  background:rgba(240,185,11,.11);border-color:rgba(240,185,11,.45);color:var(--brand);
+}
+#btnWatch.active .badge{background:var(--brand);color:var(--brand-ink);border-color:transparent}
+
+.c-star{width:44px;padding-inline:4px !important;text-align:center !important}
+thead th.c-star svg{width:13px;height:13px;vertical-align:middle;opacity:.75}
+td.c-star{padding-inline:2px !important}
+
+.star{
+  appearance:none;-webkit-appearance:none;border:0;background:transparent;
+  width:27px;height:27px;padding:0;border-radius:8px;cursor:pointer;
+  display:inline-grid;place-items:center;color:var(--txt-2);
+  transition:background .15s,color .15s,transform .1s;
+}
+.star svg{width:16px;height:16px;display:block}
+.star:hover{background:var(--surface-3);color:var(--brand)}
+.star:active{transform:scale(.88)}
+.star.on{color:var(--brand)}
+.star.on svg{fill:currentColor}
+
+tbody tr.watched td{background:rgba(240,185,11,.055)}
+tbody tr.watched:hover td{background:var(--row-hover)}
+html[data-theme="light"] tbody tr.watched td{background:rgba(227,169,0,.06)}
+html[data-theme="light"] tbody tr.watched:hover td{background:var(--row-hover)}
+
+.rc.watched{border-color:rgba(240,185,11,.34);background:linear-gradient(180deg,rgba(240,185,11,.07),transparent 70%),var(--surface-2)}
+.rc .star{width:24px;height:24px;margin-inline-start:auto}
+.rc .star svg{width:15px;height:15px}
+.rc .star.on{color:var(--brand)}
+
+.watch-bar{
+  display:none;align-items:center;gap:9px;flex-wrap:wrap;
+  padding:9px 12px;border-bottom:1px solid var(--border);
+  background:linear-gradient(90deg,rgba(240,185,11,.11),transparent 72%);
+  font-size:12px;color:var(--txt-2);
+}
+.watch-bar.show{display:flex}
+.watch-bar > svg{width:15px;height:15px;flex:0 0 auto;color:var(--brand)}
+.watch-bar .wb-txt{flex:1 1 auto;min-width:0;line-height:1.55}
+.watch-bar .wb-txt b{display:block;color:var(--txt);font-weight:800;font-size:12.5px}
+.watch-bar .wb-txt small{display:block;font-size:10.5px;color:var(--txt-3)}
+.watch-bar .btn{height:30px;padding:0 10px;font-size:11.5px;border-radius:8px}
+.watch-bar .btn.danger{color:var(--down);border-color:rgba(246,70,93,.34);background:rgba(246,70,93,.08)}
+.watch-bar .btn.danger:hover{background:rgba(246,70,93,.16);border-color:rgba(246,70,93,.5)}
+
+/* ============================================================
    Overlays
    ============================================================ */
 .progress{position:fixed;inset-inline:0;bottom:0;height:3px;z-index:99;pointer-events:none}
@@ -466,6 +522,12 @@ html[data-theme="light"] .loader{background:rgba(238,242,247,.8)}
   .status{height:34px;padding:0 9px;font-size:11px;gap:6px}
   .topbar .btn{width:34px;height:34px;padding:0}
   .topbar .btn .lbl{display:none}
+  #btnWatch{width:auto;padding:0 8px;gap:5px}
+  #btnWatch .badge{min-width:16px;height:16px;padding:0 4px;font-size:9.5px}
+  .watch-bar{padding:8px 10px;gap:7px}
+  .watch-bar .wb-txt{flex:1 1 100%;order:2}
+  .watch-bar > svg{order:1}
+  .watch-bar .btn{order:3;flex:1 1 auto}
   .btn{height:36px;font-size:12px}
   .kpis{gap:8px;margin-bottom:10px}
   .kpi{padding:9px 11px;border-radius:10px}
@@ -522,13 +584,21 @@ html[data-theme="light"] .loader{background:rgba(238,242,247,.8)}
         </svg>
       </div>
       <div class="brand-txt">
-        <h1>اسکرینر فیوچرز بایننس <span class="ver">v2</span></h1>
+        <h1>اسکرینر فیوچرز بایننس <span class="ver">v2.1</span></h1>
         <p>تمام قراردادهای پپچوال USDT-M — از بیشترین ریزش تا بیشترین رشد</p>
       </div>
     </div>
 
     <div class="actions">
       <div class="status" title="وضعیت اتصال"><span class="dot" id="dot"></span><span id="statusTxt">در حال اتصال…</span></div>
+
+      <button class="btn" id="btnWatch" type="button" aria-pressed="false" title="چک‌لیست کوین‌های نشان‌شده">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 3.7l2.62 5.31 5.86.85-4.24 4.13 1 5.84L12 17l-5.24 2.83 1-5.84L3.52 9.86l5.86-.85z"/>
+        </svg>
+        <span class="lbl">چک‌لیست</span>
+        <span class="badge num" id="watchCount">0</span>
+      </button>
 
       <button class="btn icon-btn" id="btnTheme" type="button" aria-label="تغییر تم روشن و تاریک" title="تغییر تم">
         <svg class="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
@@ -621,6 +691,18 @@ html[data-theme="light"] .loader{background:rgba(238,242,247,.8)}
       <button class="btn" id="bannerBtn" type="button">تلاش مجدد</button>
     </div>
 
+    <div class="watch-bar" id="watchBar">
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <path d="M12 3.7l2.62 5.31 5.86.85-4.24 4.13 1 5.84L12 17l-5.24 2.83 1-5.84L3.52 9.86l5.86-.85z"/>
+      </svg>
+      <span class="wb-txt">
+        <b id="watchBarTitle">چک‌لیست شما</b>
+        <small>فیلتر حداقل حجم در این حالت نادیده گرفته می‌شود؛ جستجو و بازه‌های زمانی کار می‌کنند.</small>
+      </span>
+      <button class="btn danger" id="btnWatchClear" type="button">پاک‌کردن همه</button>
+      <button class="btn" id="btnWatchExit" type="button">بستن چک‌لیست</button>
+    </div>
+
     <div class="table-wrap" id="tableWrap">
       <table>
         <thead>
@@ -633,10 +715,15 @@ html[data-theme="light"] .loader{background:rgba(238,242,247,.8)}
             <th class="sortable" data-tf="h24">۲۴ ساعت</th>
             <th class="c-spark">روند ۲۴س</th>
             <th class="c-vol">حجم ۲۴س <small>USDT</small></th>
+            <th class="c-star" title="چک‌لیست" aria-label="چک‌لیست">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 3.7l2.62 5.31 5.86.85-4.24 4.13 1 5.84L12 17l-5.24 2.83 1-5.84L3.52 9.86l5.86-.85z"/>
+              </svg>
+            </th>
           </tr>
         </thead>
         <tbody id="tbody">
-          <tr><td colspan="8" class="empty">در حال دریافت داده از بایننس…</td></tr>
+          <tr><td colspan="9" class="empty">در حال دریافت داده از بایننس…</td></tr>
         </tbody>
       </table>
     </div>
@@ -708,9 +795,10 @@ html[data-theme="light"] .loader{background:rgba(238,242,247,.8)}
 (function(){
   'use strict';
 
-  var VERSION = '2.0.0';
+  var VERSION = '2.1.0';
   var LS = 'bfs.v1';
   var LS_THEME = 'bfs.theme';
+  var LS_WATCH = 'bfs.watch';
   var BASES = [
     'https://www.binance.com/fapi/v1',
     'https://fapi.binance.com/fapi/v1',
@@ -751,7 +839,9 @@ html[data-theme="light"] .loader{background:rgba(238,242,247,.8)}
     busy: false,
     ready: false,
     scanning: false,
-    cardLimit: 120
+    cardLimit: 120,
+    watch: {},          // symbol -> added timestamp
+    watchOnly: false
   };
 
   /* ---------------- dom ---------------- */
@@ -815,6 +905,77 @@ html[data-theme="light"] .loader{background:rgba(238,242,247,.8)}
   function banner(msg){
     if(!msg){ elBanner.classList.remove('show'); return; }
     elBannerTxt.textContent = msg; elBanner.classList.add('show');
+  }
+
+  /* ---------------- watchlist (چک‌لیست) ---------------- */
+  var STAR_PATH = '<path d="M12 3.7l2.62 5.31 5.86.85-4.24 4.13 1 5.84L12 17l-5.24 2.83 1-5.84L3.52 9.86l5.86-.85z"/>';
+  var clearArmed = false, clearTid = null;
+
+  function loadWatch(){
+    try{
+      var raw = JSON.parse(localStorage.getItem(LS_WATCH) || '[]');
+      if(Array.isArray(raw)) raw.forEach(function(s){ if(typeof s === 'string') S.watch[s] = 1; });
+    }catch(e){}
+  }
+  function saveWatch(){
+    try{ localStorage.setItem(LS_WATCH, JSON.stringify(Object.keys(S.watch))); }catch(e){}
+  }
+  function watchCount(){ return Object.keys(S.watch).length; }
+
+  function resetClearBtn(){
+    clearArmed = false;
+    if(clearTid){ clearTimeout(clearTid); clearTid = null; }
+    var b = $('btnWatchClear');
+    if(b) b.textContent = 'پاک‌کردن همه';
+  }
+
+  function updateWatchUI(){
+    var n = watchCount();
+    $('watchCount').textContent = n.toLocaleString('en-US');
+
+    var btn = $('btnWatch');
+    btn.classList.toggle('active', !!S.watchOnly);
+    btn.setAttribute('aria-pressed', S.watchOnly ? 'true' : 'false');
+
+    $('watchBar').classList.toggle('show', !!S.watchOnly);
+    $('watchBarTitle').textContent = n
+      ? n.toLocaleString('en-US') + ' کوین در چک‌لیست'
+      : 'چک‌لیست خالی است — روی ستاره‌ی کنار هر کوین بزن';
+
+    var cl = $('btnWatchClear');
+    cl.disabled = !n;
+    cl.style.opacity = n ? '' : '.4';
+    if(!n) resetClearBtn();
+  }
+
+  function toggleWatch(sym){
+    if(!sym) return;
+    if(S.watch[sym]) delete S.watch[sym];
+    else S.watch[sym] = Date.now();
+    saveWatch();
+    updateWatchUI();
+    render();
+  }
+
+  function starBtn(sym, extraClass){
+    var on = !!S.watch[sym];
+    var label = on ? 'حذف از چک‌لیست' : 'افزودن به چک‌لیست';
+    return '<button class="star' + (on ? ' on' : '') + (extraClass ? ' ' + extraClass : '') + '" type="button" ' +
+      'data-watch="' + esc(sym) + '" aria-pressed="' + (on ? 'true' : 'false') + '" ' +
+      'title="' + label + '" aria-label="' + label + '">' +
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" ' +
+      'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + STAR_PATH + '</svg>' +
+      '</button>';
+  }
+
+  function emptyHTML(){
+    if(S.watchOnly){
+      if(watchCount()){
+        return '<b>هیچ‌کدام از کوین‌های چک‌لیست با این جستجو پیدا نشد</b>عبارت جستجو را پاک کنید یا «بستن چک‌لیست» را بزنید.';
+      }
+      return '<b>چک‌لیست خالی است</b>روی ستاره‌ی کنار هر کوین بزن تا اینجا ذخیره شود؛ دفعه‌ی بعد هم می‌ماند.';
+    }
+    return '<b>نمادی با این فیلترها پیدا نشد</b>جستجو یا حداقل حجم را تغییر دهید.';
   }
 
   /* ---------------- theme ---------------- */
@@ -970,7 +1131,9 @@ html[data-theme="light"] .loader{background:rgba(238,242,247,.8)}
     var out = [];
     for(var i = 0; i < S.rows.length; i++){
       var r = S.rows[i];
-      if(r.vol < cfg.minVol) continue;
+      // in checklist mode the volume filter would hide coins the user explicitly marked
+      if(S.watchOnly){ if(!S.watch[r.symbol]) continue; }
+      else if(r.vol < cfg.minVol) continue;
       if(q && r.symbol.indexOf(q) === -1 && r.base.indexOf(q) === -1) continue;
       out.push(r);
     }
@@ -1060,14 +1223,14 @@ html[data-theme="light"] .loader{background:rgba(238,242,247,.8)}
   /* ---------------- renderers ---------------- */
   function renderTable(rows, scale){
     if(!rows.length){
-      elTbody.innerHTML = '<tr><td colspan="8" class="empty"><b>نمادی با این فیلترها پیدا نشد</b>جستجو یا حداقل حجم را تغییر دهید.</td></tr>';
+      elTbody.innerHTML = '<tr><td colspan="9" class="empty">' + emptyHTML() + '</td></tr>';
       return;
     }
     var tf = cfg.tf, html = [];
     for(var i = 0; i < rows.length; i++){
       var r = rows[i], p = r.pct;
       html.push(
-        '<tr data-sym="' + esc(r.symbol) + '">' +
+        '<tr data-sym="' + esc(r.symbol) + '"' + (S.watch[r.symbol] ? ' class="watched"' : '') + '>' +
           '<td>' + symCell(r, i) + '</td>' +
           '<td class="c-px num">' + fmtPrice(r.price) + '</td>' +
           pctCell(p.h2, tf === 'h2', scale.h2) +
@@ -1076,6 +1239,7 @@ html[data-theme="light"] .loader{background:rgba(238,242,247,.8)}
           pctCell(p.h24, tf === 'h24', scale.h24) +
           '<td class="c-spark">' + sparkSVG(r.spark, trendUp(r)) + '</td>' +
           '<td class="c-vol num">' + fmtVol(r.vol) + '</td>' +
+          '<td class="c-star">' + starBtn(r.symbol) + '</td>' +
         '</tr>'
       );
     }
@@ -1084,7 +1248,7 @@ html[data-theme="light"] .loader{background:rgba(238,242,247,.8)}
 
   function renderCards(rows){
     if(!rows.length){
-      elCards.innerHTML = '<div class="empty"><b>نمادی با این فیلترها پیدا نشد</b>جستجو یا حداقل حجم را تغییر دهید.</div>';
+      elCards.innerHTML = '<div class="empty">' + emptyHTML() + '</div>';
       return;
     }
     var tf = cfg.tf;
@@ -1100,12 +1264,13 @@ html[data-theme="light"] .loader{background:rgba(238,242,247,.8)}
           '<b class="' + signClass(p[key]) + ' num">' + fmtPct(p[key]) + '</b></div>';
       }
       html.push(
-        '<article class="rc" data-sym="' + esc(r.symbol) + '">' +
+        '<article class="rc' + (S.watch[r.symbol] ? ' watched' : '') + '" data-sym="' + esc(r.symbol) + '">' +
           '<div class="rc-top">' +
             '<span class="rk">' + (i + 1) + '</span>' +
             '<span class="ic" style="' + iconStyle(r.base) + '">' + esc(iconText(r.base)) + '</span>' +
             '<span class="rc-name"><b>' + esc(r.base) + '</b><i>/USDT</i></span>' +
             '<span class="rc-px num">' + fmtPrice(r.price) + '</span>' +
+            starBtn(r.symbol) +
           '</div>' +
           '<div class="rc-pcts">' + chips + '</div>' +
           '<div class="rc-bot">' +
@@ -1147,7 +1312,9 @@ html[data-theme="light"] .loader{background:rgba(238,242,247,.8)}
     }
 
     $('stCount').textContent = rows.length.toLocaleString('en-US');
-    $('stCountSub').textContent = 'از ' + S.rows.length + ' قرارداد پپچوال';
+    $('stCountSub').textContent = S.watchOnly
+      ? 'در چک‌لیست شما'
+      : ('از ' + S.rows.length + ' قرارداد پپچوال');
 
     $('stUp').textContent = up.toLocaleString('en-US');
     $('stDown').textContent = down.toLocaleString('en-US');
@@ -1333,6 +1500,32 @@ html[data-theme="light"] .loader{background:rgba(238,242,247,.8)}
     qTimer = setTimeout(function(){ cfg.q = v; saveCfg(); resort(); }, 150);
   });
 
+  $('btnWatch').addEventListener('click', function(){
+    S.watchOnly = !S.watchOnly;
+    S.cardLimit = 120;
+    updateWatchUI();
+    resort();
+  });
+  $('btnWatchExit').addEventListener('click', function(){
+    S.watchOnly = false;
+    updateWatchUI();
+    resort();
+  });
+  $('btnWatchClear').addEventListener('click', function(){
+    if(!watchCount()) return;
+    if(!clearArmed){
+      clearArmed = true;
+      this.textContent = 'مطمئنی؟ پاک کن';
+      clearTid = setTimeout(resetClearBtn, 4000);
+      return;
+    }
+    resetClearBtn();
+    S.watch = {};
+    saveWatch();
+    updateWatchUI();
+    resort();
+  });
+
   $('btnRefresh').addEventListener('click', function(){
     if(S.scanning) return;
     scan(true);
@@ -1343,11 +1536,20 @@ html[data-theme="light"] .loader{background:rgba(238,242,247,.8)}
     if(!sym) return;
     window.open('https://www.binance.com/en/futures/' + sym, '_blank', 'noopener');
   }
+  function starHit(e){
+    var st = e.target.closest ? e.target.closest('.star[data-watch]') : null;
+    if(!st) return false;
+    e.preventDefault(); e.stopPropagation();
+    toggleWatch(st.getAttribute('data-watch'));
+    return true;
+  }
   elTbody.addEventListener('click', function(e){
+    if(starHit(e)) return;
     var tr = e.target.closest ? e.target.closest('tr[data-sym]') : null;
     if(tr) openRow(tr.getAttribute('data-sym'));
   });
   elCards.addEventListener('click', function(e){
+    if(starHit(e)) return;
     var rc = e.target.closest ? e.target.closest('.rc[data-sym]') : null;
     if(rc) openRow(rc.getAttribute('data-sym'));
   });
@@ -1389,6 +1591,8 @@ html[data-theme="light"] .loader{background:rgba(238,242,247,.8)}
 
   /* ---------------- boot ---------------- */
   $('verTxt').textContent = VERSION;
+  loadWatch();
+  updateWatchUI();
   applyUI();
   restartTimers();
   scan(true);
