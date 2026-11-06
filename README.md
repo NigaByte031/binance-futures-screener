@@ -2,7 +2,7 @@
 
 صفحه‌ی وب سبک برای دیدن **همه‌ی کوین‌های فیوچرز USDT-M بایننس**، مرتب‌شده از بیشترین ریزش تا بیشترین رشد، در بازه‌های **۲ / ۶ / ۱۲ / ۲۴ ساعته**.
 
-![نسخه](https://img.shields.io/badge/version-2.1.0-f0b90b?style=flat-square)
+![نسخه](https://img.shields.io/badge/version-2.2.0-f0b90b?style=flat-square)
 ![لایسنس](https://img.shields.io/badge/license-MIT-0ecb81?style=flat-square)
 ![بدون وابستگی](https://img.shields.io/badge/dependencies-none-6b7785?style=flat-square)
 
@@ -19,50 +19,96 @@
 
 ## نصب با یک دستور
 
-روی سرور (Ubuntu / Debian / CentOS / Rocky / Alma / Fedora / Arch / Alpine) فقط همین یک خط را بزنید:
+روی سرور (Ubuntu / Debian / CentOS / Rocky / Alma / Fedora / Arch / Alpine / openSUSE) همین یک خط:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/NigaByte031/binance-futures-screener/main/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/NigaByte031/binance-futures-screener/main/install.sh | bash
 ```
 
-اسکریپت موقع نصب این‌ها را می‌پرسد:
+**هیچ سؤالی نمی‌پرسد** و حتی لازم نیست `sudo` را خودتان بنویسید؛ اسکریپت اگر root نباشد خودش با sudo دوباره اجرا می‌شود. در پایان آدرس سایت را چاپ می‌کند.
 
-| پرسش | پیش‌فرض | توضیح |
-|---|---|---|
-| پورت سرویس | `8080` | پورتی که برنامه روی آن اجرا می‌شود |
-| دامنه | خالی | اگر خالی بمانید، با `http://IP:PORT` باز می‌شود |
-| نصب nginx | بله (اگر دامنه بدهید) | ریورس‌پروکسی روی پورت ۸۰ |
-| گواهی SSL | بله (اگر دامنه بدهید) | Let's Encrypt رایگان + ریدایرکت به https |
-| باز کردن فایروال | بله (اگر ufw/firewalld فعال باشد) | پورت‌های لازم باز می‌شوند |
+پشت صحنه چه می‌کند:
 
-بعد از نصب، سرویس به‌صورت خودکار بالا می‌آید، در بوت ثبت می‌شود و آدرس نهایی در ترمینال چاپ می‌شود.
+1. python3 و ابزار دانلود را بررسی و در صورت نبودن نصب می‌کند
+2. **اولین پورت آزاد** را انتخاب می‌کند (از ۸۰۸۰ به بعد) — اگر پورت بگیرید، همان را می‌گیرد
+3. فایل‌ها را در `/opt/binance-futures-screener` می‌نشاند و کاربر بدون دسترسی `bfscreener` می‌سازد
+4. سرویس **systemd** (یا **OpenRC** روی Alpine) می‌سازد، در بوت ثبت می‌کند و بالا می‌آورد
+5. اگر ufw یا firewalld فعال باشد پورت را باز می‌کند
+6. با `/healthz` سالم بودن سرویس را **تأیید** می‌کند و آدرس نهایی را چاپ می‌کند
 
-### نصب بدون پرسش (غیرتعاملی)
+### با دامنه و HTTPS — باز هم یک دستور
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/NigaByte031/binance-futures-screener/main/install.sh \
-  | sudo bash -s -- --port 9000 --domain screener.example.com --ssl --email you@example.com --yes
+  | bash -s -- --domain screener.example.com --email you@example.com
 ```
 
-### گزینه‌های اسکریپت
+دامنه بدهید، بقیه‌اش خودکار است: نصب nginx، ریورس‌پروکسی، گواهی رایگان Let's Encrypt و ریدایرکت به `https`. (اگر DNS هنوز به سرور وصل نباشد، نصب نمی‌شکند؛ با HTTP بالا می‌آید و دستور اصلاح را چاپ می‌کند.)
 
-```text
---port <n>        پورت سرویس (پیش‌فرض 8080)
---domain <d>      دامنه، مثلاً screener.example.com
---dir <path>      مسیر نصب (پیش‌فرض /opt/binance-futures-screener)
---nginx / --no-nginx
---ssl / --no-ssl
---email <mail>    ایمیل برای Let's Encrypt
---yes, -y         بدون پرسش
---uninstall       حذف کامل نصب
--h, --help        راهنما
-```
-
-### حذف
+### حالت تعاملی (اگر می‌خواهید خودتان انتخاب کنید)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/NigaByte031/binance-futures-screener/main/install.sh | sudo bash -s -- --uninstall
+curl -fsSL https://raw.githubusercontent.com/NigaByte031/binance-futures-screener/main/install.sh | bash -s -- --interactive
 ```
+
+پورت، دامنه، nginx، SSL، ایمیل و فایروال را تک‌تک می‌پرسد. اگر ترمینال تعاملی نباشد، خودش به حالت خودکار برمی‌گردد.
+
+### گزینه‌ها
+
+| گزینه | کار |
+|---|---|
+| `--port <n>` | پورت سرویس (پیش‌فرض: اولین پورت آزاد از ۸۰۸۰) |
+| `--domain <d>` | دامنه؛ nginx و SSL را هم خودکار راه می‌اندازد |
+| `--email <mail>` | ایمیل برای Let's Encrypt |
+| `--dir <path>` | مسیر نصب (پیش‌فرض `/opt/binance-futures-screener`) |
+| `--bind <addr>` | آدرس bind (پیش‌فرض `0.0.0.0` یا `127.0.0.1` پشت nginx) |
+| `--interactive`, `-i` | حالت پرسش‌وپاسخ |
+| `--no-nginx` / `--no-ssl` / `--no-firewall` | غیرفعال کردن هر مرحله |
+| `--dry-run` | فقط نشان بده چه می‌کند؛ هیچ تغییری اعمال نمی‌شود |
+| `--check` | گزارش وضعیت سیستم و نصب فعلی |
+| `--uninstall` | حذف کامل |
+| `--help` / `--version` | راهنما و نسخه |
+
+### به‌روزرسانی
+
+همان دستور نصب را دوباره بزنید. تنظیمات فعلی (پورت، دامنه، مسیر) از `/etc/binance-screener.install` خوانده می‌شود، از نسخه‌ی نصب‌شده بکاپ گرفته می‌شود و **اگر سرویس جدید بالا نیاید، نسخه‌ی قبلی خودکار برمی‌گردد**.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/NigaByte031/binance-futures-screener/main/install.sh | bash
+```
+
+### وضعیت و عیب‌یابی
+
+```bash
+# گزارش یک‌نگاهی: سیستم‌عامل، init، پایتون، فایروال، پورت، وضعیت سرویس
+curl -fsSL https://raw.githubusercontent.com/NigaByte031/binance-futures-screener/main/install.sh | bash -s -- --check
+
+# ببینید دقیقاً چه کاری انجام می‌شود، بدون تغییر چیزی
+curl -fsSL https://raw.githubusercontent.com/NigaByte031/binance-futures-screener/main/install.sh | bash -s -- --dry-run
+
+# لاگ کامل نصب
+tail -n 50 /var/log/binance-screener-install.log
+```
+
+### حذف کامل
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/NigaByte031/binance-futures-screener/main/install.sh | bash -s -- --uninstall
+```
+
+سرویس، فایل‌ها، کاربر سرویس و کانفیگ nginx پاک می‌شوند (گواهی SSL در certbot می‌ماند و دستور حذفش چاپ می‌شود).
+
+### چه چیزی روی سرور ساخته می‌شود
+
+| مسیر | چیست |
+|---|---|
+| `/opt/binance-futures-screener/` | خود برنامه (`index.html` + `server.py`) |
+| `/etc/systemd/system/binance-screener.service` | سرویس (یا `/etc/init.d/binance-screener` روی Alpine) |
+| `/etc/binance-screener.install` | تنظیمات نصب برای به‌روزرسانی بعدی |
+| `/etc/nginx/conf.d/binance-screener.conf` | فقط وقتی دامنه بدهید |
+| `/var/log/binance-screener-install.log` | لاگ نصب |
+
+سرویس با کاربر بدون دسترسی اجرا می‌شود و سخت‌سازی systemd دارد (`NoNewPrivileges`, `ProtectSystem`, `PrivateTmp`, محدودیت syscall و …).
 
 ---
 
@@ -182,11 +228,11 @@ curl -s localhost:8080/healthz        # هلث‌چک
 
 ## نسخه‌ها
 
-آخرین نسخه: **2.1.0** (چک‌لیست شخصی). فهرست تغییرات در [CHANGELOG.md](CHANGELOG.md).
+آخرین نسخه: **2.2.0** (نصب‌کننده‌ی بدون‌پرسش). فهرست تغییرات در [CHANGELOG.md](CHANGELOG.md).
 
 ```bash
 git tag -l          # لیست نسخه‌ها
-git checkout v2.1.0 # برگشت به یک نسخه
+git checkout v2.2.0 # برگشت به یک نسخه
 ```
 
 ---

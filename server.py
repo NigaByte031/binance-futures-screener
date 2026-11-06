@@ -17,10 +17,19 @@ Endpoints:
 import argparse
 import os
 import sys
-from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from http.server import SimpleHTTPRequestHandler
 from urllib.parse import urlparse
 
-VERSION = "1.0.0"
+try:
+    from http.server import ThreadingHTTPServer
+except ImportError:  # Python < 3.7 (e.g. CentOS 7)
+    import socketserver
+    from http.server import HTTPServer
+
+    class ThreadingHTTPServer(socketserver.ThreadingMixIn, HTTPServer):
+        daemon_threads = True
+
+VERSION = "2.2.0"
 DEFAULT_PORT = 8080
 
 
