@@ -23,6 +23,8 @@
 
 ## نصب با یک دستور
 
+> **راهنمای کامل قدم‌به‌قدم (با عیب‌یابی و چک‌لیست): [INSTALL.md](INSTALL.md)**
+
 روی سرور (Ubuntu / Debian / CentOS / Rocky / Alma / Fedora / Arch / Alpine / openSUSE) همین یک خط:
 
 ```bash

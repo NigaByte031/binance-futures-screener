@@ -16,7 +16,7 @@
 #
 set -Eeuo pipefail
 
-INSTALLER_VERSION="2.2.0"
+INSTALLER_VERSION="2.2.1"
 APP_NAME="Binance Futures Screener"
 SERVICE_NAME="binance-screener"
 REPO="NigaByte031/binance-futures-screener"
@@ -598,6 +598,7 @@ fi
 run cp -f "$SRC_DIR/index.html" "$INSTALL_DIR/index.html"
 run cp -f "$SRC_DIR/server.py"  "$INSTALL_DIR/server.py"
 [ -f "$SRC_DIR/README.md" ] && run cp -f "$SRC_DIR/README.md" "$INSTALL_DIR/README.md" || true
+[ -f "$SRC_DIR/INSTALL.md" ] && run cp -f "$SRC_DIR/INSTALL.md" "$INSTALL_DIR/INSTALL.md" || true
 [ -f "$SRC_DIR/LICENSE" ]   && run cp -f "$SRC_DIR/LICENSE"   "$INSTALL_DIR/LICENSE"   || true
 run chmod 755 "$INSTALL_DIR"
 run chmod 644 "$INSTALL_DIR/index.html"
@@ -892,6 +893,11 @@ say "  ${C_DIM}سرویس${C_RESET}         ${SERVICE_NAME}  (${INIT})"
 say "  ${C_DIM}فایروال${C_RESET}       ${FW_NOTE}"
 say "  ${C_DIM}SSL${C_RESET}           ${SSL_RESULT}"
 say "  ${C_DIM}لاگ نصب${C_RESET}       ${LOG:-—}"
+if [ "$USE_NGINX" = "0" ]; then
+  say ""
+  say "  ${C_Y}اگر سایت از بیرون باز نشد:${C_RESET} پورت ${C_B}${PORT}${C_RESET} را در فایروال ابری سرور"
+  say "  ${C_DIM}(Security Group در AWS / Firewall در Hetzner و …) هم باز کنید.${C_RESET}"
+fi
 rule
 say "  ${C_DIM}مدیریت${C_RESET}"
 if [ "$INIT" = "systemd" ]; then
