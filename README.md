@@ -2,7 +2,7 @@
 
 صفحه‌ی وب سبک برای دیدن **همه‌ی کوین‌های فیوچرز USDT-M بایننس**، مرتب‌شده از بیشترین ریزش تا بیشترین رشد، در بازه‌های **۲ / ۶ / ۱۲ / ۲۴ ساعته**.
 
-![نسخه](https://img.shields.io/badge/version-2.3.0-f0b90b?style=flat-square)
+![نسخه](https://img.shields.io/badge/version-2.3.1-f0b90b?style=flat-square)
 ![لایسنس](https://img.shields.io/badge/license-MIT-0ecb81?style=flat-square)
 ![بدون وابستگی](https://img.shields.io/badge/dependencies-none-6b7785?style=flat-square)
 
@@ -31,7 +31,13 @@
 curl -fsSL https://raw.githubusercontent.com/NigaByte031/binance-futures-screener/main/install.sh | bash
 ```
 
-**هیچ سؤالی نمی‌پرسد** و حتی لازم نیست `sudo` را خودتان بنویسید؛ اسکریپت اگر root نباشد خودش با sudo دوباره اجرا می‌شود. در پایان آدرس سایت را چاپ می‌کند.
+**فقط یک سؤال می‌پرسد: دامنه.** اگر دامنه ندارید خالی بگذارید تا سایت با IP کار کند؛ اگر بدهید، nginx و HTTPS هم خودکار راه می‌افتند. لازم نیست `sudo` را خودتان بنویسید — اسکریپت اگر root نباشد خودش با sudo دوباره اجرا می‌شود. در پایان آدرس سایت را چاپ می‌کند.
+
+برای نصب بدون هیچ سؤالی (اسکریپت، cloud-init، CI) از `--unattended` استفاده کنید:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/NigaByte031/binance-futures-screener/main/install.sh | bash -s -- --unattended
+```
 
 پشت صحنه چه می‌کند:
 
@@ -68,7 +74,10 @@ curl -fsSL https://raw.githubusercontent.com/NigaByte031/binance-futures-screene
 | `--email <mail>` | ایمیل برای Let's Encrypt |
 | `--dir <path>` | مسیر نصب (پیش‌فرض `/opt/binance-futures-screener`) |
 | `--bind <addr>` | آدرس bind (پیش‌فرض `0.0.0.0` یا `127.0.0.1` پشت nginx) |
-| `--interactive`, `-i` | حالت پرسش‌وپاسخ |
+| `--unattended` | هیچ سؤالی نپرسد (برای نصب خودکار) |
+| `--interactive`, `-i` | حالت پرسش‌وپاسخ کامل |
+| `--no-domain` | حذف دامنه و برگشت به دسترسی با IP |
+| `--menu` | باز کردن منوی تنظیمات (همان `binance-screener`) |
 | `--no-nginx` / `--no-ssl` / `--no-firewall` | غیرفعال کردن هر مرحله |
 | `--dry-run` | فقط نشان بده چه می‌کند؛ هیچ تغییری اعمال نمی‌شود |
 | `--check` | گزارش وضعیت سیستم و نصب فعلی |
@@ -82,6 +91,35 @@ curl -fsSL https://raw.githubusercontent.com/NigaByte031/binance-futures-screene
 ```bash
 curl -fsSL https://raw.githubusercontent.com/NigaByte031/binance-futures-screener/main/install.sh | bash
 ```
+
+### منوی مدیریت — بعد از نصب
+
+یک دستور، یک منو. نه پرچم حفظ می‌کنی، نه فایل کانفیگ دست می‌زنی:
+
+```bash
+binance-screener        # یا کوتاه‌تر: bfs
+```
+
+```
+  Binance Futures Screener // منوی مدیریت
+────────────────────────────────────────────────────────────
+  وضعیت   فعال
+  آدرس    https://screener.example.com
+  پورت    8080    دامنه  screener.example.com    SSL  فعال
+────────────────────────────────────────────────────────────
+   1   نمایش وضعیت و سلامت سرویس
+   2   تغییر پورت
+   3   تنظیم یا تغییر دامنه   (HTTPS خودکار)
+   4   حذف دامنه و برگشت به دسترسی با IP
+   5   ری‌استارت سرویس
+   6   دیدن لاگ سرویس
+   7   به‌روزرسانی به آخرین نسخه
+   8   حذف کامل نصب
+   0   بستن منو
+────────────────────────────────────────────────────────────
+```
+
+هر گزینه همان نصب‌کننده را با تنظیمات جدید اجرا می‌کند، پس بکاپ/بازگشت خودکار و بررسی سلامت همیشه فعال است. منو خودش دسترسی root لازم ندارد؛ فقط هنگام اعمال تغییر رمز `sudo` می‌پرسد.
 
 ### وضعیت و عیب‌یابی
 
@@ -113,6 +151,8 @@ curl -fsSL https://raw.githubusercontent.com/NigaByte031/binance-futures-screene
 | `/etc/binance-screener.install` | تنظیمات نصب برای به‌روزرسانی بعدی |
 | `/etc/nginx/conf.d/binance-screener.conf` | فقط وقتی دامنه بدهید |
 | `/var/log/binance-screener-install.log` | لاگ نصب |
+| `/usr/local/bin/binance-screener` | دستور منوی تنظیمات (لینک `bfs` هم ساخته می‌شود) |
+| `/usr/local/lib/binance-screener/install.sh` | کپی نصب‌کننده که منو از آن استفاده می‌کند |
 
 سرویس با کاربر بدون دسترسی اجرا می‌شود و سخت‌سازی systemd دارد (`NoNewPrivileges`, `ProtectSystem`, `PrivateTmp`, محدودیت syscall و …).
 

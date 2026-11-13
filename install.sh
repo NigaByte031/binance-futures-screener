@@ -4,19 +4,23 @@
 #
 #   curl -fsSL https://raw.githubusercontent.com/NigaByte031/binance-futures-screener/main/install.sh | bash
 #
-# Default behaviour is fully automatic: it picks a free port, installs the app,
-# registers a service, opens the firewall and prints the URL. No questions.
+# With a terminal attached it asks one thing: the domain (blank = plain IP
+# access). Everything else is automatic — free port, service, firewall, and
+# nginx + Let's Encrypt when a domain is given.
 #
+#   ... | bash -s -- --unattended                                      # no questions at all
 #   ... | bash -s -- --domain app.example.com --email me@example.com   # + nginx + HTTPS
 #   ... | bash -s -- --interactive                                     # guided setup
 #   ... | bash -s -- --check                                           # environment report
 #   ... | bash -s -- --uninstall                                       # remove everything
 #
+# After installing, `binance-screener` (or `bfs`) opens the settings menu.
+#
 # Supports: Ubuntu / Debian / CentOS / Rocky / Alma / Fedora / Arch / Alpine / openSUSE
 #
 set -Eeuo pipefail
 
-INSTALLER_VERSION="2.2.1"
+INSTALLER_VERSION="2.3.1"
 APP_NAME="Binance Futures Screener"
 SERVICE_NAME="binance-screener"
 REPO="NigaByte031/binance-futures-screener"
@@ -27,6 +31,9 @@ DEFAULT_DIR="/opt/binance-futures-screener"
 DEFAULT_PORT="8080"
 STATE_FILE="/etc/${SERVICE_NAME}.install"
 LOG="/var/log/${SERVICE_NAME}-install.log"
+LIB_DIR="/usr/local/lib/${SERVICE_NAME}"
+CLI_BIN="/usr/local/bin/binance-screener"
+CLI_ALIAS="/usr/local/bin/bfs"
 
 # ---------------------------------------------------------------- options ----
 OPT_PORT=""
@@ -36,11 +43,15 @@ OPT_BIND=""
 OPT_EMAIL=""
 USE_NGINX=""        # "" = decide automatically
 USE_SSL=""          # "" = decide automatically
+SSL_SET=0
 USE_FW=""           # "" = decide automatically
 INTERACTIVE=0
+UNATTENDED=0
+CLEAR_DOMAIN=0
 DRY=0
 DO_UNINSTALL=0
 DO_CHECK=0
+DO_MENU=0
 
 ORIG_ARGS=("$@")
 
@@ -84,8 +95,14 @@ usage() {
   cat <<EOF
 ${C_B}${APP_NAME} — نصب‌کننده v${INSTALLER_VERSION}${C_RESET}
 
-${C_B}نصب سریع (بدون هیچ پرسشی)${C_RESET}
+${C_B}نصب${C_RESET}
   curl -fsSL ${SELF_URL} | bash
+
+  دامنه را می‌پرسد (خالی بگذارید تا با IP کار کند). بقیه‌اش خودکار است:
+  انتخاب پورت آزاد، سرویس، فایروال، و اگر دامنه بدهید nginx + HTTPS.
+
+${C_B}بعد از نصب${C_RESET}
+  ${C_C}binance-screener${C_RESET}    باز کردن منوی تنظیمات   (یا ${C_C}bfs${C_RESET})
 
 ${C_B}گزینه‌ها${C_RESET}
   --port <n>         پورت سرویس (پیش‌فرض: اولین پورت آزاد از ${DEFAULT_PORT})
@@ -93,7 +110,10 @@ ${C_B}گزینه‌ها${C_RESET}
   --email <mail>     ایمیل برای Let's Encrypt (بدون آن هم تلاش می‌شود)
   --dir <path>       مسیر نصب (پیش‌فرض: ${DEFAULT_DIR})
   --bind <addr>      آدرس bind (پیش‌فرض: 0.0.0.0 یا 127.0.0.1 پشت nginx)
-  --interactive, -i  حالت پرسش‌وپاسخ (برای کنترل دستی همه‌چیز)
+  --unattended       هیچ سؤالی نپرسد (برای اسکریپت و نصب خودکار)
+  --interactive, -i  حالت پرسش‌وپاسخ کامل (پورت، دامنه، nginx، SSL، فایروال)
+  --no-domain        دامنه را حذف کن و به دسترسی با IP برگرد
+  --menu             منوی تنظیمات را باز کن (همان دستور binance-screener)
   --no-nginx         حتی با داشتن دامنه، nginx نصب نشود
   --no-ssl           بدون گواهی Let's Encrypt
   --no-firewall      پورت‌ها در فایروال باز نشوند
@@ -104,11 +124,14 @@ ${C_B}گزینه‌ها${C_RESET}
   -h, --help         همین راهنما
 
 ${C_B}مثال‌ها${C_RESET}
-  # نصب خودکار روی پورت آزاد، دسترسی با IP
+  # نصب با پرسیدن دامنه، روی اولین پورت آزاد
   curl -fsSL ${SELF_URL} | bash
 
   # با دامنه + HTTPS، بدون هیچ پرسشی
   curl -fsSL ${SELF_URL} | bash -s -- --domain app.example.com --email me@example.com
+
+  # نصب کاملاً خودکار (مثلاً در اسکریپت یا cloud-init)
+  curl -fsSL ${SELF_URL} | bash -s -- --unattended
 
   # پورت مشخص و نصب تعاملی
   curl -fsSL ${SELF_URL} | bash -s -- --port 9000 --interactive
@@ -278,16 +301,19 @@ while [ $# -gt 0 ]; do
     --dir)         OPT_DIR="${2:-}"; shift 2 ;;
     --bind)        OPT_BIND="${2:-}"; shift 2 ;;
     --interactive|-i) INTERACTIVE=1; shift ;;
+    --unattended|--auto) UNATTENDED=1; shift ;;
+    --no-domain)   CLEAR_DOMAIN=1; shift ;;
+    --menu)        DO_MENU=1; shift ;;
     --nginx)       USE_NGINX=1; shift ;;
     --no-nginx)    USE_NGINX=0; shift ;;
-    --ssl)         USE_SSL=1; shift ;;
-    --no-ssl)      USE_SSL=0; shift ;;
+    --ssl)         USE_SSL=1; SSL_SET=1; shift ;;
+    --no-ssl)      USE_SSL=0; SSL_SET=1; shift ;;
     --no-firewall) USE_FW=0; shift ;;
     --firewall)    USE_FW=1; shift ;;
     --dry-run)     DRY=1; shift ;;
     --check)       DO_CHECK=1; shift ;;
     --uninstall)   DO_UNINSTALL=1; shift ;;
-    --yes|-y)      shift ;;                       # kept for backwards compatibility
+    --yes|-y)      UNATTENDED=1; shift ;;         # old spelling of --unattended
     --version)     echo "$INSTALLER_VERSION"; exit 0 ;;
     -h|--help)     usage; exit 0 ;;
     *)             die "گزینه ناشناخته: $1  (راهنما: --help)" ;;
@@ -331,7 +357,13 @@ elevate() {
 }
 
 # ------------------------------------------------------------ state helpers --
-state_get() { [ -f "$STATE_FILE" ] && sed -n "s/^$1=//p" "$STATE_FILE" 2>/dev/null | head -1; }
+# always succeeds: an absent key must not trip `set -e` at the call site
+state_get() {
+  if [ -f "$STATE_FILE" ]; then
+    sed -n "s/^$1=//p" "$STATE_FILE" 2>/dev/null | head -1
+  fi
+  return 0
+}
 
 # ============================================================== doctor ======
 doctor() {
@@ -367,6 +399,7 @@ doctor() {
     if have systemctl; then
       say "    سرویس      $(systemctl is-active "$SERVICE_NAME" 2>/dev/null || echo unknown) / $(systemctl is-enabled "$SERVICE_NAME" 2>/dev/null || echo unknown)"
     fi
+    if [ -x "$CLI_BIN" ]; then say "    منو        binance-screener"; fi
   else
     say "  ${C_DIM}نصب فعالی پیدا نشد.${C_RESET}"
   fi
@@ -398,6 +431,8 @@ uninstall() {
     run systemctl reload nginx 2>/dev/null || run nginx -s reload 2>/dev/null || true
   fi
   run rm -rf "$dir"
+  run rm -rf "$LIB_DIR"
+  run rm -f "$CLI_BIN" "$CLI_ALIAS"
   run rm -f "$STATE_FILE"
   if id -u "$SERVICE_USER" >/dev/null 2>&1; then
     run userdel "$SERVICE_USER" 2>/dev/null || true
@@ -409,7 +444,184 @@ uninstall() {
   exit 0
 }
 
+# ================================================================= menu =====
+# Interactive settings menu, installed as `binance-screener` (alias `bfs`).
+MENU_IN=""; MENU_OUT=""; MENU_EOF=0; MENU_SELF=""; MENU_IP=""
+
+if [ -r /dev/tty ] && { [ -t 1 ] || [ -t 2 ]; }; then MENU_IN=/dev/tty; MENU_OUT=/dev/tty; fi
+
+mout()    { if [ -n "$MENU_OUT" ]; then printf '%s\n' "$*" >"$MENU_OUT"; else printf '%s\n' "$*"; fi; }
+mprintf() { if [ -n "$MENU_OUT" ]; then printf '%s' "$*" >"$MENU_OUT"; else printf '%s' "$*"; fi; }
+
+mread() { # mread <var> [prompt] [default]
+  local __v="$1" __p="${2:-}" __d="${3:-}" __a=""
+  [ -n "$__p" ] && mprintf "$__p"
+  if [ -n "$MENU_IN" ]; then
+    IFS= read -r __a <"$MENU_IN" || { MENU_EOF=1; __a=""; }
+  else
+    IFS= read -r __a || { MENU_EOF=1; __a=""; }
+  fi
+  [ -z "$__a" ] && __a="$__d"
+  printf -v "$__v" '%s' "$__a"
+}
+
+mpause() {
+  local _x=""
+  mprintf "  ${C_DIM}Enter برای بازگشت به منو…${C_RESET}"
+  if [ -n "$MENU_IN" ]; then IFS= read -r _x <"$MENU_IN" || true; else IFS= read -r _x || true; fi
+}
+
+menu_service_state() {
+  if have systemctl && systemctl is-active --quiet "$SERVICE_NAME" 2>/dev/null; then echo "فعال"
+  elif have rc-service && rc-service "$SERVICE_NAME" status >/dev/null 2>&1; then echo "فعال"
+  elif [ -f "$STATE_FILE" ]; then echo "متوقف"
+  else echo "نصب نشده"; fi
+}
+
+menu_draw() {
+  local port domain ssl url state
+  # repaint the screen on a real terminal so the menu stays clean
+  [ -n "$MENU_OUT" ] && printf '\033[H\033[2J' >"$MENU_OUT"
+  port="$(state_get PORT)"; port="${port:-—}"
+  domain="$(state_get DOMAIN)"
+  ssl="$(state_get SSL)"
+  state="$(menu_service_state)"
+  if [ -n "$domain" ]; then
+    if [ "$ssl" = "1" ]; then url="https://${domain}"; else url="http://${domain}"; fi
+  else
+    url="http://${MENU_IP:-$(public_ip)}:${port}"
+  fi
+  mout ""
+  mout "  ${C_B}${APP_NAME}${C_RESET} ${C_DIM}// منوی مدیریت${C_RESET}"
+  mout "${C_DIM}────────────────────────────────────────────────────────────${C_RESET}"
+  mout "  ${C_DIM}وضعیت${C_RESET}   ${state}"
+  mout "  ${C_DIM}آدرس${C_RESET}    ${C_B}${url}${C_RESET}"
+  mout "  ${C_DIM}پورت${C_RESET}    ${port}    ${C_DIM}دامنه${C_RESET}  $([ -n "$domain" ] && echo "$domain" || echo '—')    ${C_DIM}SSL${C_RESET}  $([ "$ssl" = "1" ] && echo 'فعال' || echo 'غیرفعال')"
+  mout "${C_DIM}────────────────────────────────────────────────────────────${C_RESET}"
+  mout "   ${C_B}1${C_RESET}   نمایش وضعیت و سلامت سرویس"
+  mout "   ${C_B}2${C_RESET}   تغییر پورت"
+  mout "   ${C_B}3${C_RESET}   تنظیم یا تغییر دامنه   ${C_DIM}(HTTPS خودکار)${C_RESET}"
+  mout "   ${C_B}4${C_RESET}   حذف دامنه و برگشت به دسترسی با IP"
+  mout "   ${C_B}5${C_RESET}   ری‌استارت سرویس"
+  mout "   ${C_B}6${C_RESET}   دیدن لاگ سرویس"
+  mout "   ${C_B}7${C_RESET}   به‌روزرسانی به آخرین نسخه"
+  mout "   ${C_B}8${C_RESET}   حذف کامل نصب"
+  mout "   ${C_B}0${C_RESET}   بستن منو"
+  mout "${C_DIM}────────────────────────────────────────────────────────────${C_RESET}"
+}
+
+menu_apply() {
+  local rc=0
+  mout ""
+  bash "$MENU_SELF" "$@" || rc=$?
+  mout ""
+  [ "$rc" -ne 0 ] && mout "  ${C_Y}عملیات با خطا تمام شد (کد ${rc}).${C_RESET}"
+  mpause
+}
+
+menu_change_port() {
+  local cur new
+  cur="$(state_get PORT)"; cur="${cur:-$DEFAULT_PORT}"
+  mout ""
+  mout "  ${C_DIM}پورت فعلی: ${cur}${C_RESET}"
+  mread new "  پورت جدید (خالی = انصراف): " ""
+  [ -z "$new" ] && { mout "  ${C_DIM}تغییری اعمال نشد.${C_RESET}"; return 0; }
+  case "$new" in *[!0-9]*) mout "  ${C_Y}پورت باید عدد باشد.${C_RESET}"; mpause; return 0 ;; esac
+  if [ "$new" -lt 1 ] || [ "$new" -gt 65535 ]; then
+    mout "  ${C_Y}پورت باید بین ۱ تا ۶۵۵۳۵ باشد.${C_RESET}"; mpause; return 0
+  fi
+  if [ "$new" = "$cur" ]; then mout "  ${C_DIM}همان پورت فعلی است.${C_RESET}"; return 0; fi
+  menu_apply --port "$new"
+}
+
+menu_change_domain() {
+  local cur d e
+  cur="$(state_get DOMAIN)"
+  mout ""
+  mout "  ${C_DIM}دامنه فعلی: $([ -n "$cur" ] && echo "$cur" || echo '— (دسترسی با IP)')${C_RESET}"
+  mread d "  دامنه جدید (خالی = انصراف): " ""
+  [ -z "$d" ] && { mout "  ${C_DIM}تغییری اعمال نشد.${C_RESET}"; return 0; }
+  d="${d#http://}"; d="${d#https://}"; d="${d%%/*}"
+  if ! printf '%s' "$d" | grep -Eq '^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$'; then
+    mout "  ${C_Y}دامنه نامعتبر است: ${d}${C_RESET}"; mpause; return 0
+  fi
+  e="$(state_get EMAIL)"
+  mread e "  ایمیل برای گواهی SSL (اختیاری): " "$e"
+  if [ -n "$e" ]; then menu_apply --domain "$d" --email "$e"; else menu_apply --domain "$d"; fi
+}
+
+menu_remove_domain() {
+  local a
+  mout ""
+  if [ -z "$(state_get DOMAIN)" ]; then
+    mout "  ${C_DIM}الان دامنه‌ای تنظیم نشده است.${C_RESET}"; return 0
+  fi
+  mout "  ${C_DIM}سایت به دسترسی مستقیم با IP برمی‌گردد و کانفیگ nginx حذف می‌شود.${C_RESET}"
+  mread a "  مطمئنید؟ (y/N): " "n"
+  case "$a" in y|Y|yes|YES|بله|ب) menu_apply --no-domain ;; *) mout "  ${C_DIM}لغو شد.${C_RESET}" ;; esac
+}
+
+menu_restart() {
+  mout ""
+  if have systemctl; then
+    if systemctl restart "$SERVICE_NAME" 2>/dev/null; then ok "سرویس ری‌استارت شد"; else warn "ری‌استارت ناموفق بود"; fi
+  elif have rc-service; then
+    if rc-service "$SERVICE_NAME" restart >/dev/null 2>&1; then ok "سرویس ری‌استارت شد"; else warn "ری‌استارت ناموفق بود"; fi
+  else
+    warn "init سیستم شناسایی نشد"
+  fi
+  mpause
+}
+
+menu_logs() {
+  mout ""
+  if have journalctl; then
+    journalctl -u "$SERVICE_NAME" -n 25 --no-pager 2>/dev/null || true
+  elif [ -f "/var/log/${SERVICE_NAME}.log" ]; then
+    tail -n 25 "/var/log/${SERVICE_NAME}.log" 2>/dev/null || true
+  else
+    warn "لاگی پیدا نشد"
+  fi
+  mpause
+}
+
+menu_uninstall() {
+  local a
+  mout ""
+  mout "  ${C_Y}این کار سرویس، فایل‌ها و کانفیگ nginx را پاک می‌کند.${C_RESET}"
+  mread a "  مطمئنید؟ (y/N): " "n"
+  case "$a" in y|Y|yes|YES|بله|ب) menu_apply --uninstall ;; *) mout "  ${C_DIM}لغو شد.${C_RESET}" ;; esac
+}
+
+menu() {
+  MENU_SELF="${BASH_SOURCE[0]:-$0}"
+  MENU_IP="$(public_ip 2>/dev/null || echo '<server-ip>')"
+  local choice=""
+  while :; do
+    menu_draw
+    mprintf "  ${C_DIM}شماره گزینه${C_RESET} (0 = بستن منو): "
+    mread choice
+    if [ "$MENU_EOF" = "1" ] && [ -z "$choice" ]; then mout ""; return 0; fi
+    case "$choice" in
+      0|q|Q|exit|خروج) mout ""; mout "  ${C_DIM}منو بسته شد.${C_RESET}"; mout ""; return 0 ;;
+      1) mout ""; bash "$MENU_SELF" --check || true; mpause ;;
+      2) menu_change_port ;;
+      3) menu_change_domain ;;
+      4) menu_remove_domain ;;
+      5) menu_restart ;;
+      6) menu_logs ;;
+      7) menu_apply ;;
+      8) menu_uninstall ;;
+      "") : ;;
+      *) mout "  ${C_Y}گزینه نامعتبر: ${choice}${C_RESET}" ;;
+    esac
+  done
+}
+
 # ================================================================ main ======
+# the menu itself needs no privileges; each action re-runs the installer, which
+# elevates on its own (so a normal user can still read status and logs)
+[ "$DO_MENU" = "1" ] && { menu; exit 0; }
 [ "$DO_CHECK" = "1" ] && doctor
 [ "$DO_UNINSTALL" = "1" ] && { elevate; uninstall; }
 
@@ -471,6 +683,7 @@ PREV_DOMAIN="$(state_get DOMAIN || true)"
 PREV_NGINX="$(state_get NGINX || true)"
 PREV_SSL="$(state_get SSL || true)"
 PREV_DIR="$(state_get DIR || true)"
+PREV_EMAIL="$(state_get EMAIL || true)"
 UPGRADE=0
 [ -f "$STATE_FILE" ] && UPGRADE=1
 for unit in "/etc/systemd/system/${SERVICE_NAME}.service" "/etc/init.d/${SERVICE_NAME}"; do
@@ -501,9 +714,30 @@ fi
 
 # --- domain
 DOMAIN="${OPT_DOMAIN:-${PREV_DOMAIN:-}}"
+[ "$CLEAR_DOMAIN" = "1" ] && DOMAIN=""
 DOMAIN="${DOMAIN#http://}"; DOMAIN="${DOMAIN#https://}"; DOMAIN="${DOMAIN%%/*}"
+EMAIL="${OPT_EMAIL:-${PREV_EMAIL:-}}"
+
+# fresh install with a terminal: ask for the domain (the only question we ask)
+if [ "$UPGRADE" = "0" ] && [ -z "$OPT_DOMAIN" ] && [ "$CLEAR_DOMAIN" = "0" ] \
+   && [ "$UNATTENDED" = "0" ] && [ "$INTERACTIVE" = "0" ] && [ "$TTY_READY" = "1" ]; then
+  say ""
+  say "  ${C_DIM}دامنه${C_RESET}  اگر دامنه ندارید خالی بگذارید تا سایت با IP و پورت ${PORT} کار کند."
+  say "  ${C_DIM}با دامنه، nginx و گواهی رایگان HTTPS هم خودکار راه می‌افتند.${C_RESET}"
+  ask DOMAIN "  دامنه" ""
+  DOMAIN="${DOMAIN#http://}"; DOMAIN="${DOMAIN#https://}"; DOMAIN="${DOMAIN%%/*}"
+  if [ -n "$DOMAIN" ]; then
+    ask EMAIL "  ایمیل برای گواهی SSL (اختیاری)" "$EMAIL"
+    [ -z "$EMAIL" ] && info "بدون ایمیل هم گواهی گرفته می‌شود؛ فقط اطلاع‌رسانی تمدید نمی‌آید."
+  fi
+  say ""
+fi
+
 if [ -n "$DOMAIN" ] && ! printf '%s' "$DOMAIN" | grep -Eq '^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$'; then
   die "دامنه نامعتبر است: ${DOMAIN}"
+fi
+if [ -n "$EMAIL" ] && ! printf '%s' "$EMAIL" | grep -Eq '^[^@[:space:]]+@[^@[:space:]]+\.[A-Za-z]{2,}$'; then
+  die "ایمیل نامعتبر است: ${EMAIL}"
 fi
 
 # --- interactive overrides
@@ -539,6 +773,10 @@ fi
 
 if [ -z "$USE_SSL" ]; then
   if [ "$USE_NGINX" = "1" ] && [ -n "$DOMAIN" ]; then USE_SSL=1; else USE_SSL=0; fi
+fi
+# an unchanged re-run keeps the SSL choice made the first time
+if [ "$SSL_SET" = "0" ] && [ "$UPGRADE" = "1" ] && [ -n "$PREV_SSL" ] && [ "$DOMAIN" = "$PREV_DOMAIN" ]; then
+  USE_SSL="$PREV_SSL"
 fi
 [ "$USE_NGINX" = "0" ] && USE_SSL=0
 
@@ -605,6 +843,30 @@ run chmod 644 "$INSTALL_DIR/index.html"
 run chmod 755 "$INSTALL_DIR/server.py"
 ok "فایل‌ها در ${INSTALL_DIR}"
 
+# --------------------------------------------------------------- CLI menu ---
+# a copy of this script plus a `binance-screener` command that opens the menu
+run mkdir -p "$LIB_DIR"
+if [ -f "$SRC_DIR/install.sh" ]; then
+  # the freshly fetched tarball carries the newest installer — prefer it
+  run cp -f "$SRC_DIR/install.sh" "$LIB_DIR/install.sh"
+elif [ -n "${BASH_SOURCE[0]:-}" ] && [ -f "${BASH_SOURCE[0]}" ]; then
+  run cp -f "${BASH_SOURCE[0]}" "$LIB_DIR/install.sh"
+elif [ "$DRY" = "1" ]; then
+  info "در حالت آزمایشی اسکریپت مدیریت ذخیره نمی‌شود"
+else
+  download "$SELF_URL" "$LIB_DIR/install.sh" 2>/dev/null \
+    || warn "ذخیره‌ی اسکریپت مدیریت ناموفق بود؛ منو بعداً در دسترس نیست."
+fi
+[ -f "$LIB_DIR/install.sh" ] && run chmod 755 "$LIB_DIR/install.sh" || true
+
+write_file "$CLI_BIN" 755 <<CLI_EOF
+#!/bin/sh
+# ${APP_NAME} — settings menu
+exec bash "${LIB_DIR}/install.sh" --menu "\$@"
+CLI_EOF
+run ln -sf "$CLI_BIN" "$CLI_ALIAS" 2>/dev/null || true
+ok "دستور مدیریت: ${C_B}binance-screener${C_RESET} ${C_DIM}(یا bfs)${C_RESET}"
+
 # service user (unprivileged)
 if ! group_exists "$SERVICE_USER"; then
   if have groupadd; then
@@ -645,6 +907,7 @@ PORT=${PORT}
 BIND=${BIND}
 DIR=${INSTALL_DIR}
 DOMAIN=${DOMAIN}
+EMAIL=${EMAIL}
 NGINX=${USE_NGINX}
 SSL=${USE_SSL}
 VERSION=${INSTALLER_VERSION}
@@ -828,8 +1091,8 @@ NGINX_EOF
       fi
       if [ "$DRY" = "1" ] || have certbot; then
         CERT_ARGS=(--nginx -d "$DOMAIN" --agree-tos --no-eff-email --redirect -n)
-        if [ -n "$OPT_EMAIL" ]; then
-          CERT_ARGS+=(-m "$OPT_EMAIL")
+        if [ -n "$EMAIL" ]; then
+          CERT_ARGS+=(-m "$EMAIL")
         else
           CERT_ARGS+=(--register-unsafely-without-email)
           warn "ایمیلی داده نشد؛ گواهی بدون ایمیل ثبت می‌شود (اطلاع‌رسانی تمدید نخواهید داشت)."
@@ -851,6 +1114,18 @@ NGINX_EOF
   fi
 else
   info "بدون nginx — دسترسی مستقیم روی پورت ${PORT}"
+  STALE_CONF=0
+  for conf in "/etc/nginx/conf.d/${SERVICE_NAME}.conf" "/etc/nginx/http.d/${SERVICE_NAME}.conf"; do
+    if [ -f "$conf" ]; then run rm -f "$conf"; STALE_CONF=1; fi
+  done
+  if [ "$STALE_CONF" = "1" ]; then
+    if [ "$DRY" = "1" ] || { have nginx && nginx -t >/dev/null 2>&1; }; then
+      run systemctl reload nginx 2>/dev/null || run nginx -s reload 2>/dev/null || true
+      ok "کانفیگ قبلی nginx حذف شد"
+    else
+      warn "کانفیگ nginx حذف شد ولی reload نشد؛ دستی: nginx -t && systemctl reload nginx"
+    fi
+  fi
 fi
 
 # firewall (automatic, reported in the summary)
@@ -883,7 +1158,11 @@ note "=== install done: $URL (port $PORT, nginx=$USE_NGINX ssl=$USE_SSL) ==="
 
 say ""
 rule
-printf '%s  ✔ نصب کامل شد%s  %s—  %s%s\n' "$C_G$C_B" "$C_RESET" "$C_DIM" "$APP_NAME" "$C_RESET"
+if [ "$UPGRADE" = "1" ]; then
+  printf '%s  ✔ تنظیمات اعمال شد%s  %s—  %s%s\n' "$C_G$C_B" "$C_RESET" "$C_DIM" "$APP_NAME" "$C_RESET"
+else
+  printf '%s  ✔ نصب کامل شد%s  %s—  %s%s\n' "$C_G$C_B" "$C_RESET" "$C_DIM" "$APP_NAME" "$C_RESET"
+fi
 rule
 say "  ${C_DIM}آدرس${C_RESET}          ${C_B}${C_C}${URL}${C_RESET}"
 [ "$USE_NGINX" = "1" ] && say "  ${C_DIM}پورت داخلی${C_RESET}    ${PORT}  (فقط 127.0.0.1)"
@@ -900,6 +1179,7 @@ if [ "$USE_NGINX" = "0" ]; then
 fi
 rule
 say "  ${C_DIM}مدیریت${C_RESET}"
+say "    ${C_B}binance-screener${C_RESET}   ${C_DIM}منوی تنظیمات (یا bfs)${C_RESET}"
 if [ "$INIT" = "systemd" ]; then
   say "    systemctl status ${SERVICE_NAME}"
   say "    systemctl restart ${SERVICE_NAME}"
