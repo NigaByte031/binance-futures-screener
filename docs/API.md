@@ -1,0 +1,271 @@
+# Binance Futures Screener — API
+
+نسخه ۲.۴.۰ یک API عمومی، فقط-خواندنی (read-only) و بدون نیاز به کلید ارائه میکند تا هر کسی بتواند دادههای اسکرینر را در برنامه، اسکریپت یا داشبورد خود استفاده کند.
+
+- **آدرس پایه:** `http://SERVER:PORT/api/v1` (یا `https://YOUR_DOMAIN/api/v1`)
+- **راهنمای تعاملی:** `http://SERVER:PORT/api` — همان صفحهای که با دکمه «اجرا» درخواستها را امتحان میکند.
+- **روشها:** فقط `GET` و `OPTIONS`
+- **احراز هویت:** ندارد
+- **CORS:** `Access-Control-Allow-Origin: *` — از مرورگر هم قابل فراخوانی است.
+- **قالب:** JSON با فیلد ثابت `ok`.
+
+> صفحه اصلی همچنان مستقیماً از بایننس میخواند؛ API لایهای جداگانه و کششده است که همان محاسبات را انجام میدهد. یعنی با قطع ارتباط بایننس، صفحه اصلی و API هر دو پیام خطا میگیرند، ولی بار روی بایننس بین همه کاربران تقسیم میشود.
+
+---
+
+## قالب پاسخ
+
+همه پاسخها — موفق و ناموفق — یک ساختار دارند:
+
+```json
+{
+  "ok": true,
+  "data": [ ... ],
+  "meta": {
+    "version": "2.4.0",
+    "generated_at": "2026-11-19T13:05:00Z",
+    "source": "binance-usdt-m-futures",
+    "upstream": "https://www.binance.com/fapi/v1"
+  }
+}
+```
+
+در خطا، بهجای `data` فیلد `error` میآید:
+
+```json
+{
+  "ok": false,
+  "error": {
+    "code": "INVALID_PARAM",
+    "message": "tf must be one of: h2, h6, h12, h24"
+  }
+}
+```
+
+---
+
+## اندپوینتها
+
+### `GET /api/v1/health`
+
+سلامت سرویس و وضعیت کش. مناسب مانیتورینگ.
+
+```bash
+curl -s http://localhost:8080/api/v1/health
+```
+
+پاسخ:
+```json
+{
+  "ok": true,
+  "data": {
+    "status": "ok",
+    "version": "2.4.0",
+    "upstream": "https://www.binance.com/fapi/v1",
+    "cache": {
+      "symbols": { "age_seconds": 12.4, "ttl_seconds": 600 },
+      "tickers": { "age_seconds": 3.1, "ttl_seconds": 15 },
+      "klines": { "symbols_cached": 522, "age_seconds": 22.7, "ttl_seconds": 180 },
+      "rows": { "age_seconds": 1.2, "ttl_seconds": 5 }
+    }
+  },
+  "meta": { ... }
+}
+```
+
+---
+
+### `GET /api/v1/meta`
+
+نسخه، بازههای زمانی، فیلدهای مرتبسازی و محدودیتها.
+
+```bash
+curl -s http://localhost:8080/api/v1/meta
+```
+
+---
+
+### `GET /api/v1/symbols`
+
+لیست نمادهای پپچوال USDT-M فعال. سبکترین اندپوینت — بدون کندل و محاسبه.
+
+```bash
+curl -s http://localhost:8080/api/v1/symbols
+```
+
+```json
+{
+  "ok": true,
+  "data": [
+    { "symbol": "BTCUSDT", "base": "BTC" },
+    { "symbol": "ETHUSDT", "base": "ETH" }
+  ],
+  "meta": { "count": 522, ... }
+}
+```
+
+---
+
+### `GET /api/v1/tickers`
+
+اندپوینت اصلی: تمام کوینها با چهار بازه زمانی، قابل فیلتر، مرتبسازی و صفحهبندی.
+
+| پارامتر | پیشفرض | توضیح |
+|---|---|---|
+| `tf` | `h2` | بازه مرتبسازی: `h2`, `h6`, `h12`, `h24` |
+| `sort` | `pct` | `pct`, `symbol`, `price`, `vol`, `base` |
+| `dir` | `desc` | `asc` یا `desc` |
+| `q` | — | جستجو در نماد یا ارز پایه (مثلاً `btc`) |
+| `minVol` | `0` | حداقل حجم ۲۴ ساعته به USDT |
+| `limit` | `100` | تعداد ردیف (۱–۵۰۰) |
+| `offset` | `0` | شروع صفحهبندی |
+| `spark` | `0` | `1` = اضافه کردن اسپارکلاین ۲۴ ساعته |
+
+```bash
+# ۱۰ کوین با بیشترین ریزش ۲ ساعته
+curl -s 'http://localhost:8080/api/v1/tickers?tf=h2&sort=pct&dir=asc&limit=10'
+
+# جستجوی بیتکوین با حجم بالای ۱۰ میلیون و اسپارکلاین
+curl -s 'http://localhost:8080/api/v1/tickers?q=btc&minVol=10000000&spark=1'
+
+# صفحه دوم، مرتب بر حجم
+curl -s 'http://localhost:8080/api/v1/tickers?sort=vol&limit=100&offset=100'
+```
+
+پاسخ:
+```json
+{
+  "ok": true,
+  "data": [{
+    "symbol": "BTCUSDT",
+    "base": "BTC",
+    "price": 67312.5,
+    "change": -1.234,
+    "pct": { "h2": -1.234, "h6": 0.82, "h12": 2.1, "h24": -0.45 },
+    "vol": 1284567890.25,
+    "spark": [67000, 67120, 66980]
+  }],
+  "meta": {
+    "timeframe": "h2", "sort": "pct", "dir": "desc",
+    "total": 522, "returned": 1, "limit": 100, "offset": 0,
+    "filters": { "q": null, "minVol": null },
+    "cache": { ... }
+  }
+}
+```
+
+`change` همان مقدار `pct[tf]` است و راحتتر استفاده میشود. `spark` فقط وقتی میآید که `spark=1` بدهید.
+
+---
+
+### `GET /api/v1/ticker/{symbol}`
+
+تمام چهار بازه بهعلاوه اسپارکلاین. حروف بزرگ/کوچک فرقی ندارد.
+
+```bash
+curl -s http://localhost:8080/api/v1/ticker/BTCUSDT
+curl -s http://localhost:8080/api/v1/ticker/btcusdt   # همان نتیجه
+```
+
+```json
+{
+  "ok": true,
+  "data": {
+    "symbol": "BTCUSDT",
+    "base": "BTC",
+    "quote": "USDT",
+    "price": 67312.5,
+    "pct": { "h2": -1.234, "h6": 0.82, "h12": 2.1, "h24": -0.45 },
+    "vol": 1284567890.25,
+    "spark": [67000, 67120, 66980]
+  },
+  "meta": { ... }
+}
+```
+
+---
+
+### `GET /api/v1/overview`
+
+خلاصه بازار: تعداد صعودی/نزولی، میانگین تغییر، سهم بازار، حجم کل و بهترین/بدترین کوین. پارامتر اختیاری `tf`.
+
+```bash
+curl -s 'http://localhost:8080/api/v1/overview?tf=h6'
+```
+
+```json
+{
+  "ok": true,
+  "data": {
+    "timeframe": "h6",
+    "total": 522,
+    "with_change": 520,
+    "up": 314,
+    "down": 197,
+    "flat": 9,
+    "unchanged": 9,
+    "breadth": 61.45,
+    "average_change": 0.1233,
+    "total_quote_volume": 128456789012.5,
+    "top_gainer": { "symbol": "XYZUSDT", "base": "XYZ", "price": 0.12, "change": 28.4 },
+    "top_loser": { "symbol": "ABCUSDT", "base": "ABC", "price": 0.04, "change": -31.2 }
+  },
+  "meta": { ... }
+}
+```
+
+`breadth` درصد نمادهای صعودی از مجموع صعودی＋نزولی است (نمادهای بدون تغییر حذف میشوند).
+
+---
+
+## کدهای خطا
+
+| کد | HTTP | علت |
+|---|---|---|
+| `INVALID_PARAM` | 400 | پارامتر نامعتبر یا خارج از محدوده |
+| `INVALID_SYMBOL` | 400 | نام نماد بدفرمت |
+| `SYMBOL_NOT_FOUND` | 404 | نماد وجود ندارد یا غیرفعال است |
+| `NOT_FOUND` | 404 | آدرس API وجود ندارد |
+| `UPSTREAM_ERROR` | 502 | بایننس در دسترس نیست یا منطقه مسدود است |
+| `INTERNAL_ERROR` | 500 | خطای داخلی؛ جزئیات در لاگ سرویس (`journalctl -u binance-screener`) |
+
+---
+
+## نحوه محاسبه
+
+- نمادها از `exchangeInfo` گرفته میشوند و فقط مواردی که `contractType=PERPETUAL`, `status=TRADING` و `quoteAsset=USDT` باشند نگه داشته میشوند.
+- تغییرات ۲/۶/۱۲ ساعته از کندل بسته ۱۵ دقیقه متناظر محاسبه میشود:
+  `idx = 97 - 1 - round(hours / 0.25)` و `pct = (price / close[idx] - 1) × 100`.
+- تغییر ۲۴ ساعته مستقیماً از `priceChangePercent` بایننس است.
+- حجم همان `quoteVolume` بایننس است.
+
+---
+
+## کش و تازگی
+
+| داده | TTL |
+|---|---|
+| لیست نمادها | ۱۰ دقیقه |
+| قیمت و حجم (`ticker/24hr`) | ۱۵ ثانیه |
+| کندلهای ۱۵ دقیقه | ۳ دقیقه |
+| ردیفهای آماده | ۵ ثانیه |
+
+تمام کلاینتها از یک کش مشترک روی سرور استفاده میکنند. یعنی ۱۰۰ کاربر همزمان تنها **یک** اسکن از بایننس ایجاد میکند، نه ۱۰۰ اسکن. سرور هنگام بالا آمدن کش را از پیش پر میکند تا اولین درخواست سریع پاسخ بگیرد.
+
+TTL کندلها عمداً ۳ دقیقه است چون یک اسکن کامل ~۵۰۰ نماد ممکن است ۱–۲ دقیقه طول بکشد؛ اگر TTL کوتاهتر بود، قدیمیترین کندلها همان موقع تمام اسکن منقضی میشدند و هر درخواست اسکن تازهای را آغاز میکرد.
+
+---
+
+## تنظیمات سرور (اختیاری)
+
+| متغیر محیطی | پیشفرض | توضیح |
+|---|---|---|
+| `BFS_BINANCE_BASE` | `https://www.binance.com/fapi/v1` | آدرس جایگزین upstream (برای شبکههای محدودشده) |
+| `BFS_API_TIMEOUT` | `15` | timeout هر درخواست به بایننس (ثانیه) |
+| `BFS_API_CONCURRENCY` | `20` | تعداد worker برای گرفتن کندلها (۱–۴۰) |
+
+برای تنظیم، یونیت سرویس را ویرایش و `Environment=...` اضافه کنید، سپس:
+
+```bash
+systemctl daemon-reload && systemctl restart binance-screener
+```

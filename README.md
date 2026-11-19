@@ -2,7 +2,7 @@
 
 صفحه‌ی وب سبک برای دیدن **همه‌ی کوین‌های فیوچرز USDT-M بایننس**، مرتب‌شده از بیشترین ریزش تا بیشترین رشد، در بازه‌های **۲ / ۶ / ۱۲ / ۲۴ ساعته**.
 
-![نسخه](https://img.shields.io/badge/version-2.3.1-f0b90b?style=flat-square)
+![نسخه](https://img.shields.io/badge/version-2.4.0-f0b90b?style=flat-square)
 ![لایسنس](https://img.shields.io/badge/license-MIT-0ecb81?style=flat-square)
 ![بدون وابستگی](https://img.shields.io/badge/dependencies-none-6b7785?style=flat-square)
 
@@ -234,6 +234,29 @@ python3 server.py --port 8080
 
 ---
 
+## API عمومی (جدید در ۲.۴)
+
+علاوه بر صفحه، سرور یک **API RESTful فقط-خواندنی** هم ارائه میدهد تا بقیه بتوانند همان دادهها را در برنامهها و اسکریپتهای خود استفاده کنند:
+
+```bash
+# خلاصه بازار
+curl -s http://SERVER:8080/api/v1/overview?tf=h6
+
+# ۱۰ کوین با بیشترین ریزش ۲ ساعته
+curl -s 'http://SERVER:8080/api/v1/tickers?dir=asc&limit=10'
+
+# یک نماد
+curl -s http://SERVER:8080/api/v1/ticker/BTCUSDT
+```
+
+- **بدون کلید و بدون ثبتنام**، فقط `GET`، و CORS باز (`*`) — از مرورگر هم فراخوانی میشود.
+- اندپوینتها: `/health`، `/meta`، `/symbols`، `/tickers`، `/ticker/{symbol}`، `/overview` (همه زیر `/api/v1`).
+- فیلتر، مرتبسازی، صفحهبندی و اسپارکلاین دارد.
+- **راهنمای کامل:** [docs/API.md](docs/API.md) — و صفحه تعاملی `/api` روی همان سرور که هر درخواست را با دکمه «اجرا» امتحان میکند.
+- تمام کلاینتها از **یک کش مشترک** روی سرور استفاده میکنند (قیمت ۱۵ ثانیه، کندل ۳ دقیقه)، پس ۱۰۰ کاربر همزمان تنها یک اسکن از بایننس ایجاد میکند.
+
+---
+
 ## داده‌ها از کجا می‌آید
 
 همه‌چیز مستقیم از API فیوچرز بایننس و از داخل مرورگر گرفته می‌شود:
@@ -259,15 +282,21 @@ python3 server.py --port 8080
 ```text
 .
 ├── index.html              # کل برنامه (HTML + CSS + JS، بدون وابستگی)
-├── server.py               # وب‌سرور استاتیک کوچک، فقط با کتابخانه‌ی استاندارد پایتون
-├── install.sh              # نصب‌کننده‌ی تعاملی (systemd + nginx + SSL)
+├── server.py               # وبسرور + API، فقط با کتابخانهی استاندارد پایتون
+├── api.py                  # لایه داده و کش API (بدون وابستگی)
+├── api.html                # صفحه راهنمای تعاملی API (روی /api)
+├── install.sh              # نصبکنندهی تعاملی (systemd + nginx + SSL)
 ├── Dockerfile
 ├── docker-compose.yml
-├── CHANGELOG.md            # تاریخچه‌ی نسخه‌ها
+├── README.md
+├── INSTALL.md              # راهنمای قدمبهقدم نصب
+├── CHANGELOG.md            # تاریخچهی نسخهها
 └── docs/
-    ├── preview.png         # اسکرین‌شات تم تیره
-    ├── preview-light.png   # اسکرین‌شات تم روشن
-    └── preview-watch.png   # اسکرین‌شات حالت چک‌لیست
+    ├── API.md              # مرجع کامل API
+    ├── preview.png         # اسکرینشات تم تیره
+    ├── preview-light.png   # اسکرینشات تم روشن
+    ├── preview-watch.png   # اسکرینشات حالت چکلیست
+    └── preview-mobile.png  # اسکرینشات موبایل
 ```
 
 ---
@@ -285,11 +314,11 @@ curl -s localhost:8080/healthz        # هلث‌چک
 
 ## نسخه‌ها
 
-آخرین نسخه: **2.2.0** (نصب‌کننده‌ی بدون‌پرسش). فهرست تغییرات در [CHANGELOG.md](CHANGELOG.md).
+آخرین نسخه: **2.4.0**.
 
 ```bash
 git tag -l          # لیست نسخه‌ها
-git checkout v2.2.0 # برگشت به یک نسخه
+git checkout v2.4.0 # برگشت به یک نسخه
 ```
 
 ---

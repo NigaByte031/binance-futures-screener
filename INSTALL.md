@@ -82,6 +82,7 @@ curl -fsSL https://raw.githubusercontent.com/NigaByte031/binance-futures-screene
   ✔ نصب کامل شد  —  Binance Futures Screener
 ────────────────────────────────────────────────────────────
   آدرس          http://185.12.34.56:8080
+  API           http://185.12.34.56:8080/api/v1  (راهنما: /api)
   پورت          8080  (0.0.0.0)
   مسیر نصب      /opt/binance-futures-screener
   سرویس         binance-screener  (systemd)
@@ -220,6 +221,22 @@ journalctl -u binance-screener -f      # لاگ زنده
 curl -s localhost:8080/healthz         # تست سلامت
 ```
 
+### API عمومی
+
+همان سرور یک API فقط-خواندنی هم ارائه میدهد. نیازی به کلید یا ثبتنام نیست و از هر زبانی قابل فراخوانی است:
+
+```bash
+curl -s localhost:8080/api/v1/health
+curl -s 'localhost:8080/api/v1/tickers?tf=h2&limit=10'
+curl -s localhost:8080/api/v1/ticker/BTCUSDT
+curl -s 'localhost:8080/api/v1/overview?tf=h6'
+```
+
+- **راهنمای تعاملی:** آدرس اصلی را بگیرید و `/api` به آن اضافه کنید (مثلاً `http://IP:8080/api`). در آن صفحه هر درخواست را با دکمه «اجرا» امتحان میکنید.
+- **مرجع کامل و مثالها:** فایل `docs/API.md` کنار برنامه یا [همین فایل در ریپازیتوری](docs/API.md).
+- اندپوینتها: `/health`، `/meta`، `/symbols`، `/tickers`، `/ticker/{symbol}`، `/overview` (زیر `/api/v1`).
+- تمام کاربران از یک کش مشترک روی سرور استفاده میکنند: قیمت ۱۵ ثانیه، کندل ۳ دقیقه. با دامنه و nginx، آدرس API همان دامنه شماست (`https://domain/api/v1`).
+
 روی Alpine به‌جای `systemctl` از `rc-service binance-screener status|restart` استفاده کنید.
 
 ---
@@ -250,7 +267,8 @@ curl -fsSL https://raw.githubusercontent.com/NigaByte031/binance-futures-screene
 
 | مسیر | چیست |
 |---|---|
-| `/opt/binance-futures-screener/` | برنامه (`index.html` + `server.py`) |
+| `/opt/binance-futures-screener/` | برنامه (`index.html` + `server.py` + `api.py` + `api.html`) |
+| `/opt/binance-futures-screener/docs/API.md` | مرجع کامل API |
 | `/etc/systemd/system/binance-screener.service` | یونیت سرویس (روی Alpine: `/etc/init.d/binance-screener`) |
 | `/etc/binance-screener.install` | تنظیمات نصب، برای به‌روزرسانی بعدی |
 | `/etc/nginx/conf.d/binance-screener.conf` | فقط وقتی دامنه بدهید |
@@ -301,6 +319,7 @@ docker compose up -d
 - [ ] آدرسی که چاپ شد در مرورگر باز می‌شود و لیست کوین‌ها پر است
 - [ ] پورت لازم در فایروال ابری (Security Group) باز است
 - [ ] سرویس در بوت فعال است (`systemctl is-enabled binance-screener` → `enabled`)
+- [ ] `curl -s localhost:8080/api/v1/meta` پاسخ `ok: true` میدهد
 - [ ] `binance-screener` منو را باز می‌کند و گزینه‌ی `0` آن را می‌بندد
 - [ ] (اختیاری) دامنه وصل است و HTTPS کار می‌کند
 - [ ] (اختیاری) `/healthz` جواب `ok` می‌دهد

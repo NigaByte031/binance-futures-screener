@@ -20,7 +20,7 @@
 #
 set -Eeuo pipefail
 
-INSTALLER_VERSION="2.3.1"
+INSTALLER_VERSION="2.4.0"
 APP_NAME="Binance Futures Screener"
 SERVICE_NAME="binance-screener"
 REPO="NigaByte031/binance-futures-screener"
@@ -835,8 +835,11 @@ fi
 
 run cp -f "$SRC_DIR/index.html" "$INSTALL_DIR/index.html"
 run cp -f "$SRC_DIR/server.py"  "$INSTALL_DIR/server.py"
+run cp -f "$SRC_DIR/api.py"     "$INSTALL_DIR/api.py"
+[ -f "$SRC_DIR/api.html" ] && run cp -f "$SRC_DIR/api.html" "$INSTALL_DIR/api.html" || true
 [ -f "$SRC_DIR/README.md" ] && run cp -f "$SRC_DIR/README.md" "$INSTALL_DIR/README.md" || true
 [ -f "$SRC_DIR/INSTALL.md" ] && run cp -f "$SRC_DIR/INSTALL.md" "$INSTALL_DIR/INSTALL.md" || true
+[ -f "$SRC_DIR/docs/API.md" ] && { run mkdir -p "$INSTALL_DIR/docs"; run cp -f "$SRC_DIR/docs/API.md" "$INSTALL_DIR/docs/API.md"; } || true
 [ -f "$SRC_DIR/LICENSE" ]   && run cp -f "$SRC_DIR/LICENSE"   "$INSTALL_DIR/LICENSE"   || true
 run chmod 755 "$INSTALL_DIR"
 run chmod 644 "$INSTALL_DIR/index.html"
@@ -1165,6 +1168,7 @@ else
 fi
 rule
 say "  ${C_DIM}آدرس${C_RESET}          ${C_B}${C_C}${URL}${C_RESET}"
+say "  ${C_DIM}API${C_RESET}            ${C_B}${URL%/}/api/v1${C_RESET}  ${C_DIM}(راهنما: ${URL%/}/api)${C_RESET}"
 [ "$USE_NGINX" = "1" ] && say "  ${C_DIM}پورت داخلی${C_RESET}    ${PORT}  (فقط 127.0.0.1)"
 [ "$USE_NGINX" = "0" ] && say "  ${C_DIM}پورت${C_RESET}          ${PORT}  (${BIND})"
 say "  ${C_DIM}مسیر نصب${C_RESET}      ${INSTALL_DIR}"
@@ -1189,6 +1193,7 @@ elif [ "$INIT" = "openrc" ]; then
   say "    tail -f /var/log/${SERVICE_NAME}.log"
 fi
 say "    curl -s ${URL%/}/healthz"
+say "    curl -s ${URL%/}/api/v1/meta"
 rule
 say "  ${C_DIM}به‌روزرسانی${C_RESET}   همان دستور نصب را دوباره اجرا کنید (تنظیمات فعلی حفظ می‌شود)"
 say "  ${C_DIM}حذف${C_RESET}           curl -fsSL ${SELF_URL} | bash -s -- --uninstall"

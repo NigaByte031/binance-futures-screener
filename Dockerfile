@@ -6,7 +6,7 @@ LABEL org.opencontainers.image.title="Binance Futures Screener" \
       org.opencontainers.image.licenses="MIT"
 
 WORKDIR /app
-COPY index.html server.py ./
+COPY index.html server.py api.py api.html ./
 
 ENV PORT=8080 \
     BIND=0.0.0.0 \
