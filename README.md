@@ -2,7 +2,7 @@
 
 صفحه‌ی وب سبک برای دیدن **همه‌ی کوین‌های فیوچرز USDT-M بایننس**، مرتب‌شده از بیشترین ریزش تا بیشترین رشد، در بازه‌های **۲ / ۶ / ۱۲ / ۲۴ ساعته**.
 
-![نسخه](https://img.shields.io/badge/version-2.4.0-f0b90b?style=flat-square)
+![نسخه](https://img.shields.io/badge/version-2.4.1-f0b90b?style=flat-square)
 ![لایسنس](https://img.shields.io/badge/license-MIT-0ecb81?style=flat-square)
 ![بدون وابستگی](https://img.shields.io/badge/dependencies-none-6b7785?style=flat-square)
 
@@ -314,11 +314,11 @@ curl -s localhost:8080/healthz        # هلث‌چک
 
 ## نسخه‌ها
 
-آخرین نسخه: **2.4.0**.
+آخرین نسخه: **2.4.1**.
 
 ```bash
 git tag -l          # لیست نسخه‌ها
-git checkout v2.4.0 # برگشت به یک نسخه
+git checkout v2.4.1 # برگشت به یک نسخه
 ```
 
 ---

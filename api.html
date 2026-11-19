@@ -44,6 +44,14 @@ h1{margin:0 0 8px;font-size:28px;letter-spacing:-.5px}
 .base small{color:var(--txt-3);font-size:12px}
 .base code{font-family:var(--mono);direction:ltr;unicode-bidi:isolate;color:var(--brand);font-size:13px}
 
+.installed{margin:4px 0 30px;background:var(--panel);border:1px solid var(--brand);border-radius:var(--r);padding:17px 18px;box-shadow:0 0 0 3px rgba(240,185,11,.06)}
+.inst-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+.inst-tag{background:var(--brand);color:var(--brand-ink);font-size:11.5px;font-weight:800;padding:3px 9px;border-radius:6px}
+.inst-lead{margin:0 0 9px;color:var(--txt-2);font-size:12.5px}
+.inst-url{display:block;direction:ltr;unicode-bidi:isolate;font-family:var(--mono);font-size:17px;font-weight:700;color:var(--brand);background:var(--panel-2);border:1px dashed var(--line);border-radius:9px;padding:10px 13px;word-break:break-all}
+.installed pre{margin-top:11px;background:var(--panel-2);color:var(--txt-2)}
+.inst-foot{margin:9px 0 0;color:var(--txt-3);font-size:11.5px}
+
 .facts{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:8px 0 34px}
 .fact{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-sm);padding:13px 15px}
 .fact b{display:block;font-size:13px;margin-bottom:3px}
@@ -93,7 +101,17 @@ footer{margin-top:44px;padding-top:18px;border-top:1px solid var(--line-2);color
   <div class="hero">
     <h1>راهنمای API</h1>
     <p>یک API عمومی و فقط-خواندنی (read-only) برای دریافت لیست قراردادهای پپچوال USDT-M بایننس به همراه تغییرات ۲، ۶، ۱۲ و ۲۴ ساعته. نیازی به کلید یا ثبتنام نیست؛ از هر زبان یا مرورگری میشود فراخوانی کرد.</p>
-    <div class="base"><small>آدرس پایه</small><code id="baseUrl">/api/v1</code><small>همین دامنهای که اسکرینر روی آن نصب است</small></div>
+  </div>
+
+  <div class="installed">
+    <div class="inst-head">
+      <span class="inst-tag">آدرس این نصب</span>
+      <button class="btn" id="copyBase" type="button">کپی آدرس API</button>
+    </div>
+    <p class="inst-lead">هر کسی که میخواهد از API استفاده کند، درخواستهای خود را دقیقاً به این آدرس بزند:</p>
+    <div class="inst-url mono" id="baseUrl">/api/v1</div>
+    <pre id="curlExamples"></pre>
+    <p class="inst-foot" id="instNote"></p>
   </div>
 
   <div class="facts">
@@ -204,7 +222,7 @@ footer{margin-top:44px;padding-top:18px;border-top:1px solid var(--line-2);color
   </div>
 
   <footer>
-    <span>اسکرینر فیوچرز بایننس — API نسخه ۲.۴.۰</span>
+    <span>اسکرینر فیوچرز بایننس — API نسخه ۲.۴.۱</span>
     <span><a href="./">صفحه اصلی</a></span>
   </footer>
 </div>
@@ -219,7 +237,41 @@ footer{margin-top:44px;padding-top:18px;border-top:1px solid var(--line-2);color
     var next=root.getAttribute('data-theme')==='light'?'dark':'light';
     root.setAttribute('data-theme',next); localStorage.setItem('bfs.theme',next);
   });
-  document.getElementById('baseUrl').textContent=location.protocol+'//'+location.host+'/api/v1';
+  /* The installer replaces the placeholder below with the real domain/IP. */
+  var CONFIGURED_BASE = '__BFS_API_BASE__';
+  function apiOrigin(){
+    if(CONFIGURED_BASE && CONFIGURED_BASE.indexOf('__') < 0){
+      return CONFIGURED_BASE.replace(/\/+$/,'');
+    }
+    return location.protocol+'//'+location.host;
+  }
+  var ORIGIN = apiOrigin();
+  var BASE = ORIGIN + '/api/v1';
+  document.getElementById('baseUrl').textContent = BASE;
+  document.getElementById('curlExamples').textContent =
+    "curl -s '"+BASE+"/health'\n"+
+    "curl -s '"+BASE+"/tickers?tf=h2&limit=10'\n"+
+    "curl -s '"+BASE+"/ticker/BTCUSDT'\n"+
+    "curl -s '"+BASE+"/overview?tf=h6'";
+  var configured = CONFIGURED_BASE && CONFIGURED_BASE.indexOf('__') < 0;
+  document.getElementById('instNote').textContent =
+    configured
+      ? 'این آدرس هنگام نصب از دامنهای که وارد کردید ثبت شده است. اگر دامنه تغییر کرد، دستور نصب را دوباره اجرا کنید.'
+      : (location.hostname.indexOf('github.io') >= 0)
+        ? 'این نسخه فقط نمایشی است و API ندارد. API در سرور نصبشده در دسترس است؛ آدرس آن همان دامنهای است که اسکرینر را روی آن نصب کردید.'
+        : 'این آدرس از نام دامنهای که صفحه را باز کردید تشخیص داده شده است.';
+  document.getElementById('copyBase').addEventListener('click',function(){
+    var btn=this;
+    function done(){ var old=btn.textContent; btn.textContent='کپی شد ✔'; setTimeout(function(){btn.textContent=old;},1600); }
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(BASE).then(done,function(){ fallback(); });
+    } else { fallback(); }
+    function fallback(){
+      var t=document.createElement('textarea'); t.value=BASE; document.body.appendChild(t);
+      t.select(); try{ document.execCommand('copy'); done(); }catch(e){ btn.textContent='کپی دستی: '+BASE; }
+      document.body.removeChild(t);
+    }
+  });
 
   [].forEach.call(document.querySelectorAll('.try'),function(box){
     var btn=box.querySelector('button'), input=box.querySelector('input');

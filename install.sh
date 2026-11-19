@@ -20,7 +20,7 @@
 #
 set -Eeuo pipefail
 
-INSTALLER_VERSION="2.4.0"
+INSTALLER_VERSION="2.4.1"
 APP_NAME="Binance Futures Screener"
 SERVICE_NAME="binance-screener"
 REPO="NigaByte031/binance-futures-screener"
@@ -790,6 +790,17 @@ ok "پورت ${C_B}${PORT}${C_RESET}$([ "$UPGRADE" = "1" ] && echo " (از نص�
 if [ "$USE_NGINX" = "1" ]; then ok "دامنه ${C_B}${DOMAIN}${C_RESET} — nginx + $([ "$USE_SSL" = "1" ] && echo 'HTTPS' || echo 'HTTP')"; else ok "دسترسی مستقیم با IP روی پورت ${PORT}"; fi
 ok "مسیر ${INSTALL_DIR}$([ "$UPGRADE" = "1" ] && echo "  (به‌روزرسانی نصب موجود)" || true)"
 
+# The public base address is baked into the installed API documentation so a
+# visitor immediately knows where to send requests. Resolved once here and
+# reused in the final summary.
+PUBLIC_IP="$(public_ip)"
+if [ "$USE_NGINX" = "1" ] && [ -n "$DOMAIN" ]; then
+  if [ "$USE_SSL" = "1" ]; then PUBLIC_BASE="https://${DOMAIN}"; else PUBLIC_BASE="http://${DOMAIN}"; fi
+else
+  PUBLIC_BASE="http://${PUBLIC_IP}:${PORT}"
+fi
+info "آدرس API که در مستندات ثبت میشود: ${C_B}${PUBLIC_BASE}/api/v1${C_RESET}"
+
 # ------------------------------------------------------------ 3) source ----
 step 3 7 "دریافت فایل‌های برنامه"
 
@@ -843,6 +854,15 @@ run cp -f "$SRC_DIR/api.py"     "$INSTALL_DIR/api.py"
 [ -f "$SRC_DIR/LICENSE" ]   && run cp -f "$SRC_DIR/LICENSE"   "$INSTALL_DIR/LICENSE"   || true
 run chmod 755 "$INSTALL_DIR"
 run chmod 644 "$INSTALL_DIR/index.html"
+
+# Bake the real base address into the installed documentation, so anyone who
+# opens /api sees exactly which host to call. Repository copies keep generic
+# placeholders so the GitHub Pages version stays neutral.
+run sed -i "s|__BFS_API_BASE__|${PUBLIC_BASE}|g" "$INSTALL_DIR/api.html" 2>/dev/null || true
+for _doc in "$INSTALL_DIR/docs/API.md" "$INSTALL_DIR/README.md" "$INSTALL_DIR/INSTALL.md"; do
+  run sed -i "s|http://SERVER:8080|${PUBLIC_BASE}|g" "$_doc" 2>/dev/null || true
+done
+ok "آدرس API (${C_B}${PUBLIC_BASE}/api/v1${C_RESET}) در مستندات ثبت شد"
 run chmod 755 "$INSTALL_DIR/server.py"
 ok "فایل‌ها در ${INSTALL_DIR}"
 
@@ -1150,12 +1170,7 @@ if [ "$USE_FW" != "0" ]; then
 fi
 
 # ------------------------------------------------------------ summary ------
-PUBLIC_IP="$(public_ip)"
-if [ "$USE_NGINX" = "1" ]; then
-  if [ "$SSL_RESULT" = "فعال" ]; then URL="https://${DOMAIN}"; else URL="http://${DOMAIN}"; fi
-else
-  URL="http://${PUBLIC_IP}:${PORT}"
-fi
+URL="${PUBLIC_BASE}"
 
 note "=== install done: $URL (port $PORT, nginx=$USE_NGINX ssl=$USE_SSL) ==="
 
