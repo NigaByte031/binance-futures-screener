@@ -887,7 +887,7 @@ html[data-theme="light"] .loader{background:rgba(238,241,246,.82)}
 <div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
   <div class="card">
     <h3 id="sheetTitle">تنظیمات</h3>
-    <p class="sub">اگر API اصلی در دسترس نبود، آدرس دیگری وارد کنید. تنظیمات در همین مرورگر ذخیره می‌شود.</p>
+    <p class="sub">اگر API اصلی در دسترس نبود، آدرس دیگری وارد کنید. تنظیمات در همین مرورگر ذخیره می‌شود.<br>منبع داده: <b id="srcTxt">—</b></p>
 
     <div class="row"><label for="baseInput">آدرس API</label><input type="text" id="baseInput" placeholder="https://www.binance.com/fapi/v1" spellcheck="false"></div>
 
@@ -976,7 +976,9 @@ html[data-theme="light"] .loader{background:rgba(238,241,246,.82)}
     watch: {},          // symbol -> added timestamp
     watchOnly: false,
     prevPx: {},
-    prevPct: {}
+    prevPct: {},
+    source: 'direct',   // 'local' = server API + live stream, 'direct' = Binance from browser
+    stream: null
   };
 
   /* ---------------- dom ---------------- */
@@ -1732,6 +1734,132 @@ html[data-theme="light"] .loader{background:rgba(238,241,246,.82)}
     }).then(function(){ S.busy = false; });
   }
 
+  /* ---------------- server snapshot + live stream ---------------- */
+  function apiLocal(path, ms){
+    return withTimeout(fetch(path, {cache:'no-store'}), ms || 15000).then(function(r){
+      if(!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    }).then(function(j){
+      if(j && j.ok === false) throw new Error((j.error && j.error.message) || 'خطای API');
+      return j;
+    });
+  }
+
+  function detectLocal(){
+    return apiLocal('/api/v1/meta', 2500).then(function(j){
+      return !!(j && j.ok && j.data && j.data.version);
+    }).catch(function(){ return false; });
+  }
+
+  function mapApiRows(items){
+    return (items || []).map(function(x){
+      return {
+        symbol: x.symbol, base: x.base, price: x.price,
+        pct: x.pct, vol: x.vol, spark: x.spark
+      };
+    }).filter(function(r){ return isFinite(r.price) && r.pct && r.symbol; });
+  }
+
+  function fetchServerRows(full){
+    var q = '?spark=1&limit=500' + (full ? '&force=1' : '');
+    return apiLocal('/api/v1/tickers' + q, 90000).then(function(j){
+      var meta = j.meta || {};
+      if((meta.total || 0) <= 500) return {rows:j.data, meta:meta};
+      return apiLocal('/api/v1/tickers?spark=1&limit=500&offset=500', 30000).then(function(j2){
+        return {rows:(j.data || []).concat(j2.data || []), meta:meta};
+      });
+    });
+  }
+
+  function updateSrc(){
+    var el = $('srcTxt');
+    if(el) el.textContent = S.source === 'local'
+      ? 'API همان سرور — بروزرسانی زنده' : 'بایننس مستقیم (مرورگر)';
+  }
+
+  function markServerTime(meta){
+    S.lastTick = (meta && meta.last_update) ? (meta.last_update * 1000) : Date.now();
+  }
+
+  function applySnapshot(payload){
+    if(!payload || !payload.data) return;
+    if(!cfg.autoRefresh) return;
+    var rows = mapApiRows(payload.data);
+    if(!rows.length) return;
+    S.rows = rows;
+    markServerTime(payload.meta);
+    render();
+    setStatus('متصل · API سرور · ' + clock(new Date(S.lastTick)), 'live');
+  }
+
+  function openStream(){
+    if(S.stream || !window.EventSource) return;
+    try{
+      var es = new EventSource('/api/v1/stream');
+      es.addEventListener('snapshot', function(e){
+        try{ applySnapshot(JSON.parse(e.data)); }catch(err){}
+      });
+      es.addEventListener('update', function(e){
+        try{ applySnapshot(JSON.parse(e.data)); }catch(err){}
+      });
+      es.onerror = function(){
+        if(S.source === 'local') setStatus('اتصال زنده قطع شد · تلاش مجدد', 'err');
+      };
+      S.stream = es;
+    }catch(err){}
+  }
+
+  function closeStream(){
+    if(S.stream){ try{ S.stream.close(); }catch(err){} S.stream = null; }
+  }
+
+  function scanLocal(full){
+    if(S.scanning) return Promise.resolve();
+    S.scanning = true;
+    banner('');
+    setStatus('در حال بارگذاری از سرور…', 'busy');
+    $('btnRefresh').classList.add('spin');
+    if(full) elLoader.classList.remove('hide');
+    setProgress(12, 'دریافت داده از API سرور…');
+
+    return fetchServerRows(full).then(function(res){
+      var rows = mapApiRows(res.rows);
+      if(!rows.length) throw new Error('دادههایی از سرور نرسید');
+      S.ticker = {};
+      rows.forEach(function(r){
+        S.ticker[r.symbol] = {price:r.price, quoteVol:r.vol, pct24:r.pct.h24};
+      });
+      S.symbols = rows.map(function(r){ return {symbol:r.symbol, base:r.base}; });
+      S.symbolByKey = {};
+      S.symbols.forEach(function(sym){ S.symbolByKey[sym.symbol] = sym; });
+      S.prevPx = {}; S.prevPct = {};
+      S.rows = rows;
+      S.lastScan = Date.now();
+      markServerTime(res.meta);
+      S.ready = true;
+      S.source = 'local';
+      setProgress(100, 'آماده شد');
+      render();
+      updateSrc();
+      setStatus('متصل · API سرور · ' + clock(new Date(S.lastTick)), 'live');
+      setTimeout(function(){ elLoader.classList.add('hide'); }, 220);
+      openStream();
+    }).catch(function(err){
+      elLoader.classList.add('hide');
+      setStatus('خطا در سرور', 'err');
+      banner('خطا در خواندن API سرور: ' + String(err && err.message || err));
+    }).then(function(){
+      S.scanning = false;
+      $('btnRefresh').classList.remove('spin');
+      elBar.style.width = '0%';
+    });
+  }
+
+  function reload(){
+    if(S.scanning) return;
+    if(S.source === 'local') scanLocal(true); else scan(true);
+  }
+
   /* ---------------- wiring ---------------- */
   function applyUI(){
     document.body.className = 'mode-' + cfg.colorMode;
@@ -1823,11 +1951,8 @@ html[data-theme="light"] .loader{background:rgba(238,241,246,.82)}
     toast('چک‌لیست پاک شد');
   });
 
-  $('btnRefresh').addEventListener('click', function(){
-    if(S.scanning) return;
-    scan(true);
-  });
-  $('bannerBtn').addEventListener('click', function(){ scan(true); });
+  $('btnRefresh').addEventListener('click', reload);
+  $('bannerBtn').addEventListener('click', reload);
 
   function openRow(sym){
     if(!sym) return;
@@ -1883,7 +2008,7 @@ html[data-theme="light"] .loader{background:rgba(238,241,246,.82)}
     if(typing || e.metaKey || e.ctrlKey || e.altKey) return;
     var k = e.key.toLowerCase();
     if(e.key === '/'){ e.preventDefault(); $('q').focus(); return; }
-    if(k === 'r'){ e.preventDefault(); if(!S.scanning) scan(true); return; }
+    if(k === 'r'){ e.preventDefault(); reload(); return; }
     if(k === 'w'){ e.preventDefault(); $('btnWatch').click(); return; }
     if(k === 't'){ e.preventDefault(); $('btnTheme').click(); return; }
   });
@@ -1903,8 +2028,15 @@ html[data-theme="light"] .loader{background:rgba(238,241,246,.82)}
   var timers = [];
   function restartTimers(){
     timers.forEach(clearInterval); timers = [];
-    timers.push(setInterval(function(){ if(cfg.autoRefresh) tick(); }, 15000));
-    timers.push(setInterval(function(){ if(cfg.autoRefresh && !S.scanning) scan(false); }, Math.max(60, cfg.rescanSec) * 1000));
+    if(S.source === 'local'){
+      // the stream pushes every change; this is only a safety net if it dies
+      timers.push(setInterval(function(){
+        if(cfg.autoRefresh && !S.scanning && !S.stream) scanLocal(false);
+      }, 60000));
+    } else {
+      timers.push(setInterval(function(){ if(cfg.autoRefresh) tick(); }, 15000));
+      timers.push(setInterval(function(){ if(cfg.autoRefresh && !S.scanning) scan(false); }, Math.max(60, cfg.rescanSec) * 1000));
+    }
   }
 
   /* ---------------- boot ---------------- */
@@ -1912,8 +2044,12 @@ html[data-theme="light"] .loader{background:rgba(238,241,246,.82)}
   loadWatch();
   updateWatchUI();
   applyUI();
-  restartTimers();
-  scan(true);
+  detectLocal().then(function(local){
+    S.source = local ? 'local' : 'direct';
+    updateSrc();
+    restartTimers();
+    return local ? scanLocal(true) : scan(true);
+  });
 })();
 </script>
 </body>
