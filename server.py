@@ -32,8 +32,8 @@ import argparse
 import datetime
 import json
 import os
+import queue
 import sys
-import threading
 from http.server import SimpleHTTPRequestHandler
 from urllib.parse import parse_qs, unquote, urlparse
 
@@ -110,9 +110,12 @@ class Handler(SimpleHTTPRequestHandler):
         })
 
     def meta_base(self):
+        generation, updated = self.DATA.generation_info()
         return {
             "version": VERSION,
             "generated_at": _now(),
+            "last_update": updated,
+            "generation": generation,
             "source": "binance-usdt-m-futures",
             "upstream": self.DATA.active_base,
         }
@@ -219,9 +222,13 @@ class Handler(SimpleHTTPRequestHandler):
                     "endpoints": [
                         "/api/v1/health", "/api/v1/meta", "/api/v1/symbols",
                         "/api/v1/tickers", "/api/v1/ticker/{symbol}",
-                        "/api/v1/overview",
+                        "/api/v1/overview", "/api/v1/stream",
                     ],
-                })
+                }, self.meta_base())
+                return
+
+            if clean == "/api/v1/stream":
+                self.route_stream()
                 return
 
             if clean == "/api/v1/symbols":
@@ -275,6 +282,60 @@ class Handler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    # ----------------------------------------------------------- live stream -
+    def _sse(self, event, payload):
+        raw = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+        self.wfile.write(("event: %s\ndata: %s\n\n" % (event, raw)).encode("utf-8"))
+        self.wfile.flush()
+
+    def _snapshot(self):
+        rows = self.DATA.rows()
+        data = []
+        for row in rows:
+            data.append({
+                "symbol": row["symbol"],
+                "base": row["base"],
+                "price": row["price"],
+                "pct": row["pct"],
+                "vol": row["vol"],
+                "spark": row["spark"],
+            })
+        meta = self.meta_base()
+        meta["total"] = len(data)
+        return {"data": data, "meta": meta}
+
+    def route_stream(self):
+        """Server-Sent Events: push the shared snapshot whenever it changes."""
+        self._is_api = True
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Connection", "keep-alive")
+        self.send_header("X-Accel-Buffering", "no")
+        self._cors()
+        self.end_headers()
+
+        q = self.DATA.subscribe()
+        last = -1
+        try:
+            generation, _ = self.DATA.generation_info()
+            self._sse("snapshot", self._snapshot())
+            last = generation
+            while True:
+                try:
+                    gen = q.get(timeout=15)
+                except queue.Empty:
+                    self.wfile.write(b": ping\n\n")
+                    self.wfile.flush()
+                    continue
+                if gen != last:
+                    last = gen
+                    self._sse("update", self._snapshot())
+        except (BrokenPipeError, ConnectionResetError, OSError, ValueError):
+            pass
+        finally:
+            self.DATA.unsubscribe(q)
+
     def route_one(self, symbol):
         if not symbol or not symbol.replace("_", "").isalnum():
             raise ApiError("INVALID_SYMBOL", "Symbol must look like BTCUSDT", 400)
@@ -314,8 +375,10 @@ class Handler(SimpleHTTPRequestHandler):
         min_vol = self.read_float(p, "minVol", 0.0, 0.0)
         query = (self.one(p, "q", "") or "").strip().upper()
         with_spark = self.read_bool(p, "spark")
-
-        rows = self.DATA.rows()
+        if self.read_bool(p, "force"):
+            rows = self.DATA.force_refresh()
+        else:
+            rows = self.DATA.rows()
         if query:
             rows = [r for r in rows
                     if query in r["symbol"].upper() or query in r["base"].upper()]
@@ -388,15 +451,9 @@ def main():
 
     Handler.DATA = ScreenerData()
 
-    def warm_up():
-        """Fill the cache at startup so the first API call is not a 500-request scan."""
-        try:
-            Handler.DATA.rows()
-        except Exception as exc:
-            sys.stderr.write("cache warm-up failed (will retry on demand): %s\n" % exc)
-            sys.stderr.flush()
-
-    threading.Thread(target=warm_up, daemon=True).start()
+    # The server keeps one snapshot fresh on its own; visitors and API clients
+    # only ever read from it. A client-triggered scan is never required.
+    Handler.DATA.start_background()
 
     handler = lambda *a, **kw: Handler(*a, directory=args.dir, **kw)  # noqa: E731
 

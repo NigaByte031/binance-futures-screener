@@ -21,9 +21,12 @@ Set BFS_BINANCE_BASE to override the upstream (useful on restricted networks
 and for tests). BFS_API_CONCURRENCY controls the kline worker count.
 """
 
+import hashlib
 import json
 import math
 import os
+import queue
+import sys
 import threading
 import time
 import urllib.error
@@ -132,6 +135,74 @@ class ScreenerData(object):
         self._locks = {}
         self._cache_lock = threading.Lock()
         self._fetched = {}
+
+        # One shared snapshot for every consumer (UI, SSE clients, REST API).
+        self._generation = 0
+        self._last_update = 0.0
+        self._fingerprint = None
+        self._subscribers = []
+        self._sub_lock = threading.Lock()
+        self._bg_started = False
+
+    # ------------------------------------------------------- shared snapshot -
+    def generation_info(self):
+        return self._generation, self._last_update
+
+    def subscribe(self):
+        """Return a queue that receives the generation number on each change."""
+        q = queue.Queue(maxsize=2)
+        with self._sub_lock:
+            self._subscribers.append(q)
+        return q
+
+    def unsubscribe(self, q):
+        with self._sub_lock:
+            if q in self._subscribers:
+                self._subscribers.remove(q)
+
+    def _publish(self, rows):
+        """Bump the generation only when the snapshot really changed."""
+        h = hashlib.sha1()
+        for r in rows:
+            h.update(r["symbol"].encode("utf-8"))
+            h.update(repr((r["price"], r["vol"], r["pct"])).encode("utf-8"))
+        digest = h.hexdigest()
+        if digest == self._fingerprint:
+            return
+        self._fingerprint = digest
+        self._generation += 1
+        self._last_update = time.time()
+        with self._sub_lock:
+            subs = list(self._subscribers)
+        for q in subs:
+            try:
+                q.put_nowait(self._generation)
+            except queue.Full:
+                pass
+
+    def start_background(self, interval=5):
+        """Keep the shared snapshot fresh without waiting for a visitor."""
+        if self._bg_started:
+            return
+        self._bg_started = True
+
+        def loop():
+            while True:
+                try:
+                    self.rows()
+                except Exception as exc:
+                    sys.stderr.write("background refresh: %s\n" % exc)
+                    sys.stderr.flush()
+                time.sleep(interval)
+
+        threading.Thread(target=loop, daemon=True).start()
+
+    def force_refresh(self):
+        """Drop price/row caches so the next read really hits Binance."""
+        with self._cache_lock:
+            self._cache.pop("tickers", None)
+            self._cache.pop("rows", None)
+        return self.rows()
 
     # ------------------------------------------------------------- caching --
     def _cached(self, key, ttl, producer):
@@ -296,6 +367,7 @@ class ScreenerData(object):
                     "spark": sparks.get(symbol),
                 })
             self._fetched["rows"] = time.time()
+            self._publish(rows)
             return rows
 
         return self._cached("rows", self.TTL_ROWS, build)
