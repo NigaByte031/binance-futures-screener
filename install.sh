@@ -20,7 +20,7 @@
 #
 set -Eeuo pipefail
 
-INSTALLER_VERSION="2.4.1"
+INSTALLER_VERSION="2.5.0"
 APP_NAME="Binance Futures Screener"
 SERVICE_NAME="binance-screener"
 REPO="NigaByte031/binance-futures-screener"
@@ -1080,6 +1080,18 @@ server {
     location = /healthz {
         proxy_pass http://127.0.0.1:${PORT}/healthz;
         access_log off;
+    }
+
+    # Server-Sent Events must not be buffered, or live updates arrive late
+    location /api/v1/stream {
+        proxy_pass http://127.0.0.1:${PORT};
+        proxy_http_version 1.1;
+        proxy_set_header Connection '';
+        proxy_set_header Host \$host;
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 3600s;
+        add_header X-Accel-Buffering no;
     }
 
     location / {

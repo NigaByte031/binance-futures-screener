@@ -34,7 +34,7 @@ import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 
-VERSION = "2.4.1"
+VERSION = "2.5.0"
 
 BASES = [
     "https://www.binance.com/fapi/v1",
