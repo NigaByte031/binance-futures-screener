@@ -173,7 +173,7 @@ curl -fsSL https://raw.githubusercontent.com/NigaByte031/binance-futures-screene
 sudo nginx -T | grep -E "include.*(sites-enabled|conf\.d|http\.d)"
 ```
 
-اگر خروجی `sites-enabled` نشان دهد، فایلی که نصبکننده بهطور پیشفرض در `conf.d` مینویسد **بارگذاری نمیشود**. سرویس پایتون را نصب کنید و ریورسپروکسی را خودتان در کنار سایتهای موجود بسازید:
+نسخه ۲.۶.۰ نصبکننده خودتشخیص است و فایل را در همان پوشهای مینویسد که nginx واقعاً میخواند. دستور بالا فقط برای اطمینان و برای سرورهایی است که نصب قدیمی دارند. اگر خروجی `sites-enabled` است و میخواهید ریورسپروکسی را کاملاً دستی کنترل کنید، از مسیر زیر استفاده کنید:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/NigaByte031/binance-futures-screener/main/install.sh \
@@ -372,6 +372,7 @@ curl -fsSL https://raw.githubusercontent.com/NigaByte031/binance-futures-screene
 |---|---|
 | `/opt/binance-futures-screener/` | برنامه (`index.html` + `server.py` + `api.py` + `api.html`) |
 | `/opt/binance-futures-screener/docs/API.md` | مرجع کامل API |
+| `/opt/binance-futures-screener/smoke-test.sh` | چک کامل استقرار (TLS, API, SSE) |
 | `/etc/systemd/system/binance-screener.service` | یونیت سرویس (روی Alpine: `/etc/init.d/binance-screener`) |
 | `/etc/binance-screener.install` | تنظیمات نصب، برای به‌روزرسانی بعدی |
 | `/etc/nginx/conf.d/binance-screener.conf` | فقط وقتی دامنه بدهید؛ روی Alpine `http.d` و روی سرورهای پنلداری مثل CyberPanel طبق بخش ۴.۱ دستی در `sites-enabled` |
@@ -417,6 +418,27 @@ docker compose up -d
 سایت روی `http://SERVER_IP:8080` بالا می‌آید. برای تغییر پورت، `docker-compose.yml` را ویرایش کنید.
 
 ---
+
+## ۱۲.۱) چک کامل با یک دستور
+
+اسکریپت `smoke-test.sh` داخل ریپازیتوری، تمام چکهای لازم را پشت سر هم انجام میدهد: سرویس محلی، ریدایرکت HTTP به HTTPS، گواهی TLS، `/api/v1/meta`، وجود ردیف زنده، رویداد `snapshot` در جریان زنده و (اختیاری) پورتهای سرویسهای همسایه.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/NigaByte031/binance-futures-screener/main/smoke-test.sh -o smoke-test.sh
+bash smoke-test.sh screener.example.com 18080
+```
+
+اگر اسکریپت را از کامپیوتر خودتان اجرا میکنید و سرور همانجا نیست:
+
+```bash
+BFS_SMOKE_SKIP_LOCAL=1 bash smoke-test.sh screener.example.com
+```
+
+برای چک کردن اینکه سرویسهای دیگری هم قطع نشدهاند:
+
+```bash
+BFS_SMOKE_EXTRA_PORTS="80 443 8443 6379 11211" bash smoke-test.sh screener.example.com 18080
+```
 
 ## ۱۳) چک‌لیست نهایی
 

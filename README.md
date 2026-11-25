@@ -2,7 +2,7 @@
 
 صفحه‌ی وب سبک برای دیدن **همه‌ی کوین‌های فیوچرز USDT-M بایننس**، مرتب‌شده از بیشترین ریزش تا بیشترین رشد، در بازه‌های **۲ / ۶ / ۱۲ / ۲۴ ساعته**.
 
-![نسخه](https://img.shields.io/badge/version-2.5.0-f0b90b?style=flat-square)
+![نسخه](https://img.shields.io/badge/version-2.6.0-f0b90b?style=flat-square)
 ![لایسنس](https://img.shields.io/badge/license-MIT-0ecb81?style=flat-square)
 ![بدون وابستگی](https://img.shields.io/badge/dependencies-none-6b7785?style=flat-square)
 
@@ -62,9 +62,9 @@ curl -fsSL https://raw.githubusercontent.com/NigaByte031/binance-futures-screene
 
 ### سرورهایی که از پنل مدیریتی استفاده میکنند
 
-روی سرورهایی مثل **CyberPanel / cPanel / aaPanel** معمولاً یک nginx از قبل روی پورت ۸۰ و ۴۴۳ هست و فقط فایلهای داخل `sites-enabled` را میخواند. نصبکننده بهطور پیشفرض فایل خودش را در `conf.d` مینویسد؛ در این سرورها آن فایل نادیده گرفته میشود.
+نسخه ۲.۶.۰ نصبکننده بهطور خودکار تشخیص میدهد که nginx کدام پوشه را میخواند و فایل را در همانجا مینویسد. اگر از نصب قدیمی مهاجرت کردهاید یا به هر دلیل میخواهید ریورسپروکسی را دستی کنترل کنید، از مسیر زیر استفاده کنید:
 
-راه تمیز: اجازه دهید نصبکننده فقط سرویس پایتون را بالا بیاورد و ریورسپروکسی را در کنار سایتهای موجود اضافه کنید:
+در این حالت اجازه دهید نصبکننده فقط سرویس پایتون را بالا بیاورد و ریورسپروکسی را در کنار سایتهای موجود اضافه کنید:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/NigaByte031/binance-futures-screener/main/install.sh \
@@ -172,6 +172,16 @@ binance-screener        # یا کوتاه‌تر: bfs
 هر گزینه همان نصب‌کننده را با تنظیمات جدید اجرا می‌کند، پس بکاپ/بازگشت خودکار و بررسی سلامت همیشه فعال است. منو خودش دسترسی root لازم ندارد؛ فقط هنگام اعمال تغییر رمز `sudo` می‌پرسد.
 
 ### وضعیت و عیب‌یابی
+
+چک کامل استقرار (همراه گواهی TLS، API و جریان زنده) با یک دستور:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/NigaByte031/binance-futures-screener/main/smoke-test.sh -o smoke-test.sh
+bash smoke-test.sh whatchlist.cc.cd 18080
+```
+
+اگر اسکریپت را خارج از سرور اجرا میکنید، چک پورت محلی را رد کنید: `BFS_SMOKE_SKIP_LOCAL=1 bash smoke-test.sh whatchlist.cc.cd`.
+
 
 ```bash
 # گزارش یک‌نگاهی: سیستم‌عامل، init، پایتون، فایروال، پورت، وضعیت سرویس
@@ -346,6 +356,7 @@ curl -s http://SERVER:8080/api/v1/ticker/BTCUSDT
 ├── api.py                  # لایه داده و کش API (بدون وابستگی)
 ├── api.html                # صفحه راهنمای تعاملی API (روی /api)
 ├── install.sh              # نصبکنندهی تعاملی (systemd + nginx + SSL)
+├── smoke-test.sh           # چک کامل استقرار (TLS, API, SSE, سرویسهای همسایه)
 ├── Dockerfile
 ├── docker-compose.yml
 ├── README.md
@@ -374,11 +385,11 @@ curl -s localhost:8080/healthz        # هلث‌چک
 
 ## نسخه‌ها
 
-آخرین نسخه: **2.5.0**.
+آخرین نسخه: **2.6.0**.
 
 ```bash
 git tag -l          # لیست نسخه‌ها
-git checkout v2.5.0 # برگشت به یک نسخه
+git checkout v2.6.0 # برگشت به یک نسخه
 ```
 
 ---

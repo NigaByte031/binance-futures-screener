@@ -27,7 +27,7 @@
   "ok": true,
   "data": [ ... ],
   "meta": {
-    "version": "2.5.0",
+    "version": "2.6.0",
     "generated_at": "2026-11-19T13:05:00Z",
     "source": "binance-usdt-m-futures",
     "upstream": "https://www.binance.com/fapi/v1",
@@ -57,6 +57,8 @@
 
 سلامت سرویس و وضعیت کش. مناسب مانیتورینگ.
 
+از نسخه ۲.۶ فیلد `upstream_health` هم اضافه شده است. `stale` وقتی `true` میشود که سرور نتوانسته در ۶۰ ثانیه اخیر به بایننس دسترسی پیدا کند؛ `consecutive_failures` تعداد دفعات شکست پیاپی و `last_error` آخرین پیام خطاست. همان فیلدها در `meta` تمام پاسخها هم موجودند.
+
 ```bash
 curl -s http://localhost:8080/api/v1/health
 ```
@@ -67,8 +69,16 @@ curl -s http://localhost:8080/api/v1/health
   "ok": true,
   "data": {
     "status": "ok",
-    "version": "2.5.0",
+    "version": "2.6.0",
     "upstream": "https://www.binance.com/fapi/v1",
+    "upstream_health": {
+      "status": "ok",
+      "stale": false,
+      "last_success": 1795603892.88,
+      "age_seconds": 3.2,
+      "consecutive_failures": 0,
+      "last_error": null
+    },
     "cache": {
       "symbols": { "age_seconds": 12.4, "ttl_seconds": 600 },
       "tickers": { "age_seconds": 3.1, "ttl_seconds": 15 },
@@ -324,6 +334,7 @@ journalctl -u binance-screener -n 50 --no-pager
 |---|---|---|
 | `BFS_BINANCE_BASE` | `https://www.binance.com/fapi/v1` | آدرس جایگزین upstream (برای شبکههای محدودشده) |
 | `BFS_API_TIMEOUT` | `15` | timeout هر درخواست به بایننس (ثانیه) |
+| `BFS_API_RETRIES` | `2` | تعداد تلاش مجدد برای خطاهای موقت شبکه و پاسخ ۵xx (۰ تا ۵) |
 | `BFS_API_CONCURRENCY` | `20` | تعداد worker برای گرفتن کندلها (۱–۴۰) |
 
 برای تنظیم، یونیت سرویس را ویرایش و `Environment=...` اضافه کنید، سپس:
