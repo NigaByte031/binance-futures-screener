@@ -20,7 +20,7 @@
 #
 set -Eeuo pipefail
 
-INSTALLER_VERSION="2.5.0"
+INSTALLER_VERSION="2.6.0"
 APP_NAME="Binance Futures Screener"
 SERVICE_NAME="binance-screener"
 REPO="NigaByte031/binance-futures-screener"
@@ -173,6 +173,33 @@ write_file() {
   chmod "$mode" "$tmp"
   mv -f "$tmp" "$path"
   note "wrote $path"
+}
+
+# Pick the nginx directory that this machine actually includes. Alpine uses
+# http.d, plain Debian/RHEL uses conf.d, and panel distros (CyberPanel,
+# cPanel, aaPanel) usually only include sites-enabled. Writing into a directory
+# nginx never reads leaves a silent, broken install.
+nginx_conf_path() { # nginx_conf_path [domain]
+  local d="${1:-${DOMAIN:-}}"
+  if [ -d /etc/nginx/http.d ]; then
+    printf '/etc/nginx/http.d/%s.conf\n' "$SERVICE_NAME"
+  elif [ -d /etc/nginx/sites-enabled ] && have nginx \
+       && nginx -T 2>/dev/null | grep -Eq 'include[[:space:]].*sites-enabled/.*\.conf'; then
+    printf '/etc/nginx/sites-enabled/%s.conf\n' "${d:-$SERVICE_NAME}"
+  else
+    printf '/etc/nginx/conf.d/%s.conf\n' "$SERVICE_NAME"
+  fi
+}
+
+# Every path we may have written in the past, used for cleanup on reinstall,
+# --no-nginx and --uninstall.
+nginx_conf_candidates() { # nginx_conf_candidates [domain]
+  local d="${1:-${DOMAIN:-}}"
+  printf '/etc/nginx/conf.d/%s.conf\n' "$SERVICE_NAME"
+  printf '/etc/nginx/http.d/%s.conf\n' "$SERVICE_NAME"
+  printf '/etc/nginx/sites-enabled/%s.conf\n' "$SERVICE_NAME"
+  [ -n "$d" ] && printf '/etc/nginx/sites-enabled/%s.conf\n' "$d"
+  return 0
 }
 
 download() { # download <url> <dest>
@@ -413,9 +440,10 @@ uninstall() {
   say ""
   say "${C_B}  حذف ${APP_NAME}${C_RESET}"
   rule
-  local dir port
+  local dir port domain
   dir="$(state_get DIR)"; dir="${dir:-${OPT_DIR:-$DEFAULT_DIR}}"
   port="$(state_get PORT)"; port="${port:-$DEFAULT_PORT}"
+  domain="$(state_get DOMAIN || true)"
 
   if have systemctl; then
     run systemctl stop "$SERVICE_NAME" 2>/dev/null || true
@@ -426,7 +454,7 @@ uninstall() {
   fi
   run rm -f "/etc/systemd/system/${SERVICE_NAME}.service" "/etc/init.d/${SERVICE_NAME}"
   have systemctl && { run systemctl daemon-reload || true; }
-  run rm -f "/etc/nginx/conf.d/${SERVICE_NAME}.conf" "/etc/nginx/http.d/${SERVICE_NAME}.conf"
+  while IFS= read -r conf; do run rm -f "$conf"; done < <(nginx_conf_candidates "$domain")
   if have nginx && nginx -t >/dev/null 2>&1; then
     run systemctl reload nginx 2>/dev/null || run nginx -s reload 2>/dev/null || true
   fi
@@ -841,6 +869,7 @@ if [ "$UPGRADE" = "1" ] && [ -f "$INSTALL_DIR/index.html" ] && [ "$DRY" != "1" ]
   mkdir -p "$INSTALL_DIR/.previous"
   cp -f "$INSTALL_DIR/index.html" "$INSTALL_DIR/.previous/index.html" 2>/dev/null || true
   cp -f "$INSTALL_DIR/server.py"  "$INSTALL_DIR/.previous/server.py"  2>/dev/null || true
+  cp -f "$INSTALL_DIR/api.py"     "$INSTALL_DIR/.previous/api.py"     2>/dev/null || true
   ok "نسخه قبلی برای بازگشت پشتیبان‌گیری شد"
 fi
 
@@ -851,7 +880,8 @@ run cp -f "$SRC_DIR/api.py"     "$INSTALL_DIR/api.py"
 [ -f "$SRC_DIR/README.md" ] && run cp -f "$SRC_DIR/README.md" "$INSTALL_DIR/README.md" || true
 [ -f "$SRC_DIR/INSTALL.md" ] && run cp -f "$SRC_DIR/INSTALL.md" "$INSTALL_DIR/INSTALL.md" || true
 [ -f "$SRC_DIR/docs/API.md" ] && { run mkdir -p "$INSTALL_DIR/docs"; run cp -f "$SRC_DIR/docs/API.md" "$INSTALL_DIR/docs/API.md"; } || true
-[ -f "$SRC_DIR/LICENSE" ]   && run cp -f "$SRC_DIR/LICENSE"   "$INSTALL_DIR/LICENSE"   || true
+[ -f "$SRC_DIR/LICENSE" ]       && run cp -f "$SRC_DIR/LICENSE"       "$INSTALL_DIR/LICENSE"       || true
+[ -f "$SRC_DIR/smoke-test.sh" ] && run cp -f "$SRC_DIR/smoke-test.sh" "$INSTALL_DIR/smoke-test.sh" || true
 run chmod 755 "$INSTALL_DIR"
 run chmod 644 "$INSTALL_DIR/index.html"
 
@@ -864,6 +894,7 @@ for _doc in "$INSTALL_DIR/docs/API.md" "$INSTALL_DIR/README.md" "$INSTALL_DIR/IN
 done
 ok "آدرس API (${C_B}${PUBLIC_BASE}/api/v1${C_RESET}) در مستندات ثبت شد"
 run chmod 755 "$INSTALL_DIR/server.py"
+[ -f "$INSTALL_DIR/smoke-test.sh" ] && run chmod 755 "$INSTALL_DIR/smoke-test.sh" || true
 ok "فایل‌ها در ${INSTALL_DIR}"
 
 # --------------------------------------------------------------- CLI menu ---
@@ -1043,6 +1074,7 @@ else
       warn "بازگشت به نسخه قبلی…"
       cp -f "$INSTALL_DIR/.previous/index.html" "$INSTALL_DIR/index.html" 2>/dev/null || true
       cp -f "$INSTALL_DIR/.previous/server.py"  "$INSTALL_DIR/server.py"  2>/dev/null || true
+      cp -f "$INSTALL_DIR/.previous/api.py"     "$INSTALL_DIR/api.py"     2>/dev/null || true
       if [ "$INIT" = "systemd" ]; then systemctl restart "$SERVICE_NAME" 2>/dev/null || true; fi
       if [ "$INIT" = "openrc" ]; then rc-service "$SERVICE_NAME" restart 2>/dev/null || true; fi
       die "به‌روزرسانی ناموفق بود و نسخه قبلی بازگردانده شد."
@@ -1061,12 +1093,14 @@ if [ "$USE_NGINX" = "1" ]; then
     install_pkgs nginx
   fi
   if [ "$DRY" = "1" ] || have nginx; then
-    if [ -d /etc/nginx/http.d ]; then
-      NGINX_CONF="/etc/nginx/http.d/${SERVICE_NAME}.conf"     # Alpine
-    else
-      run mkdir -p /etc/nginx/conf.d
-      NGINX_CONF="/etc/nginx/conf.d/${SERVICE_NAME}.conf"      # Debian / RHEL
-    fi
+    NGINX_CONF="$(nginx_conf_path "$DOMAIN")"
+    run mkdir -p "$(dirname "$NGINX_CONF")"
+    info "کانفیگ nginx: ${NGINX_CONF}"
+    while IFS= read -r conf; do
+      if [ -f "$conf" ] && [ "$conf" != "$NGINX_CONF" ]; then
+        run rm -f "$conf"
+      fi
+    done < <(nginx_conf_candidates "$DOMAIN")
     write_file "$NGINX_CONF" 644 <<NGINX_EOF
 # ${APP_NAME} — generated by install.sh
 server {
@@ -1150,9 +1184,9 @@ NGINX_EOF
 else
   info "بدون nginx — دسترسی مستقیم روی پورت ${PORT}"
   STALE_CONF=0
-  for conf in "/etc/nginx/conf.d/${SERVICE_NAME}.conf" "/etc/nginx/http.d/${SERVICE_NAME}.conf"; do
+  while IFS= read -r conf; do
     if [ -f "$conf" ]; then run rm -f "$conf"; STALE_CONF=1; fi
-  done
+  done < <(nginx_conf_candidates "$DOMAIN")
   if [ "$STALE_CONF" = "1" ]; then
     if [ "$DRY" = "1" ] || { have nginx && nginx -t >/dev/null 2>&1; }; then
       run systemctl reload nginx 2>/dev/null || run nginx -s reload 2>/dev/null || true
