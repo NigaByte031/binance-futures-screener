@@ -58,7 +58,7 @@ MAX_LIMIT = 500
 
 
 def _now():
-    return datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -118,6 +118,7 @@ class Handler(SimpleHTTPRequestHandler):
             "generation": generation,
             "source": "binance-usdt-m-futures",
             "upstream": self.DATA.active_base,
+            "upstream_health": self.DATA.health_info(),
         }
 
     # ----------------------------------------------------------- validation -
@@ -205,6 +206,7 @@ class Handler(SimpleHTTPRequestHandler):
                     "status": "ok",
                     "version": VERSION,
                     "upstream": self.DATA.active_base,
+                    "upstream_health": self.DATA.health_info(),
                     "cache": self.DATA.cache_info(),
                 })
                 return

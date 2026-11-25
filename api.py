@@ -34,7 +34,7 @@ import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 
-VERSION = "2.5.0"
+VERSION = "2.6.0"
 
 BASES = [
     "https://www.binance.com/fapi/v1",
@@ -62,8 +62,9 @@ class ApiError(Exception):
 
 
 class UpstreamError(ApiError):
-    def __init__(self, message):
+    def __init__(self, message, retryable=False):
         ApiError.__init__(self, "UPSTREAM_ERROR", message, 502)
+        self.retryable = retryable
 
 
 def _fetch_json(url, timeout):
@@ -78,15 +79,17 @@ def _fetch_json(url, timeout):
             raise UpstreamError("Binance rate limit reached (HTTP %s)" % exc.code)
         if exc.code == 451:
             raise UpstreamError("Binance blocked this region (HTTP 451)")
-        raise UpstreamError("Binance returned HTTP %s" % exc.code)
+        raise UpstreamError("Binance returned HTTP %s" % exc.code,
+                            retryable=(exc.code >= 500))
     except Exception as exc:
-        raise UpstreamError("Cannot reach Binance: %s" % exc)
+        raise UpstreamError("Cannot reach Binance: %s" % exc, retryable=True)
 
     try:
         raw = res.read()
         data = json.loads(raw.decode("utf-8"))
     except Exception as exc:
-        raise UpstreamError("Invalid response from Binance: %s" % exc)
+        raise UpstreamError("Invalid response from Binance: %s" % exc,
+                            retryable=True)
     finally:
         try:
             res.close()
@@ -127,6 +130,10 @@ class ScreenerData(object):
         self.active_base = self.bases[0]
         self.timeout = float(os.environ.get("BFS_API_TIMEOUT", "15"))
         try:
+            self.retries = max(0, min(5, int(os.environ.get("BFS_API_RETRIES", "2"))))
+        except ValueError:
+            self.retries = 2
+        try:
             self.concurrency = max(1, min(40, int(os.environ.get("BFS_API_CONCURRENCY", "20"))))
         except ValueError:
             self.concurrency = 20
@@ -135,6 +142,13 @@ class ScreenerData(object):
         self._locks = {}
         self._cache_lock = threading.Lock()
         self._fetched = {}
+
+        # Upstream health: one successful request resets the failure streak,
+        # a total failure across every base is recorded for /health and meta.
+        self._health_lock = threading.Lock()
+        self._last_success = 0.0
+        self._consecutive_failures = 0
+        self._last_error = None
 
         # One shared snapshot for every consumer (UI, SSE clients, REST API).
         self._generation = 0
@@ -147,6 +161,23 @@ class ScreenerData(object):
     # ------------------------------------------------------- shared snapshot -
     def generation_info(self):
         return self._generation, self._last_update
+
+    def health_info(self):
+        """Small, safe-to-expose view of upstream freshness for monitoring."""
+        now = time.time()
+        with self._health_lock:
+            last = self._last_success
+            failures = self._consecutive_failures
+            error = self._last_error
+        age = round(now - last, 1) if last else None
+        return {
+            "status": "degraded" if failures else "ok",
+            "stale": age is None or age > 60,
+            "last_success": last or None,
+            "age_seconds": age,
+            "consecutive_failures": failures,
+            "last_error": error,
+        }
 
     def subscribe(self):
         """Return a queue that receives the generation number on each change."""
@@ -229,17 +260,32 @@ class ScreenerData(object):
         return [self.active_base] + [b for b in self.bases if b != self.active_base]
 
     def upstream(self, path, params=None):
+        """Try every base, retrying transient failures on each one."""
         last = None
         for base in self._order():
             url = base.rstrip("/") + path
             if params:
                 url += "?" + urllib.parse.urlencode(params)
-            try:
-                data = _fetch_json(url, self.timeout)
-                self.active_base = base
-                return data
-            except UpstreamError as exc:
-                last = exc
+            for attempt in range(self.retries + 1):
+                try:
+                    data = _fetch_json(url, self.timeout)
+                except UpstreamError as exc:
+                    last = exc
+                    if exc.retryable and attempt < self.retries:
+                        time.sleep(min(1.0, 0.25 * (2 ** attempt)))
+                        continue
+                    break
+                else:
+                    self.active_base = base
+                    with self._health_lock:
+                        self._last_success = time.time()
+                        self._consecutive_failures = 0
+                        self._last_error = None
+                    return data
+
+        with self._health_lock:
+            self._consecutive_failures += 1
+            self._last_error = str(last) if last else "No Binance endpoint responded"
         raise last or UpstreamError("No Binance endpoint responded")
 
     # ---------------------------------------------------------------- pieces -
