@@ -8,6 +8,9 @@
 
 **نسخه آنلاین (بدون نصب):** https://nigabyte031.github.io/binance-futures-screener/
 
+**نمونه استقرار روی سرور شخصی (همین ریپازیتوری):** https://whatchlist.cc.cd
+API آن: `https://whatchlist.cc.cd/api/v1` — مستندات تعاملی: https://whatchlist.cc.cd/api
+
 ![پیش‌نمایش — تم تیره](docs/preview.png)
 
 <p align="center">
@@ -56,6 +59,53 @@ curl -fsSL https://raw.githubusercontent.com/NigaByte031/binance-futures-screene
 ```
 
 دامنه بدهید، بقیه‌اش خودکار است: نصب nginx، ریورس‌پروکسی، گواهی رایگان Let's Encrypt و ریدایرکت به `https`. (اگر DNS هنوز به سرور وصل نباشد، نصب نمی‌شکند؛ با HTTP بالا می‌آید و دستور اصلاح را چاپ می‌کند.)
+
+### سرورهایی که از پنل مدیریتی استفاده میکنند
+
+روی سرورهایی مثل **CyberPanel / cPanel / aaPanel** معمولاً یک nginx از قبل روی پورت ۸۰ و ۴۴۳ هست و فقط فایلهای داخل `sites-enabled` را میخواند. نصبکننده بهطور پیشفرض فایل خودش را در `conf.d` مینویسد؛ در این سرورها آن فایل نادیده گرفته میشود.
+
+راه تمیز: اجازه دهید نصبکننده فقط سرویس پایتون را بالا بیاورد و ریورسپروکسی را در کنار سایتهای موجود اضافه کنید:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/NigaByte031/binance-futures-screener/main/install.sh \
+  | bash -s -- --port 18080 --bind 127.0.0.1 --domain screener.example.com --no-nginx --no-firewall
+```
+
+بعد یک vhost تازه در `/etc/nginx/sites-enabled/screener.example.com.conf` بسازید و حتماً مسیر `/api/v1/stream` را بدون بافر پراکسی کنید:
+
+```nginx
+server {
+    listen 80;
+    server_name screener.example.com;
+    location ^~ /.well-known/acme-challenge/ { root /var/www/certbot; }
+    location / { return 301 https://screener.example.com$request_uri; }
+}
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name screener.example.com;
+    ssl_certificate     /etc/letsencrypt/live/screener.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/screener.example.com/privkey.pem;
+
+    location /api/v1/stream {
+        proxy_pass http://127.0.0.1:18080;
+        proxy_http_version 1.1;
+        proxy_set_header Connection '';
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 3600s;
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:18080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+ترتیب درست: اول یک vhost موقت فقط HTTP بسازید تا certbot چالش را پاس دهد، گواهی را بگیرید، سپس بلوک HTTPS بالا را جایگزین و nginx را ریلود کنید. دستورهای کامل و deploy-hook تمدید گواهی در [INSTALL.md](INSTALL.md) است.
 
 ### حالت تعاملی (اگر می‌خواهید خودتان انتخاب کنید)
 
@@ -149,7 +199,7 @@ curl -fsSL https://raw.githubusercontent.com/NigaByte031/binance-futures-screene
 | `/opt/binance-futures-screener/` | خود برنامه (`index.html` + `server.py`) |
 | `/etc/systemd/system/binance-screener.service` | سرویس (یا `/etc/init.d/binance-screener` روی Alpine) |
 | `/etc/binance-screener.install` | تنظیمات نصب برای به‌روزرسانی بعدی |
-| `/etc/nginx/conf.d/binance-screener.conf` | فقط وقتی دامنه بدهید |
+| `/etc/nginx/conf.d/binance-screener.conf` | فقط وقتی دامنه بدهید؛ روی Alpine `http.d` و روی سرورهای پنلداری مثل CyberPanel باید دستی در `sites-enabled` ساخته شود |
 | `/var/log/binance-screener-install.log` | لاگ نصب |
 | `/usr/local/bin/binance-screener` | دستور منوی تنظیمات (لینک `bfs` هم ساخته می‌شود) |
 | `/usr/local/lib/binance-screener/install.sh` | کپی نصب‌کننده که منو از آن استفاده می‌کند |
@@ -236,6 +286,8 @@ python3 server.py --port 8080
 
 ## API عمومی (جدید در ۲.۴)
 
+نمونه استقرار واقعی همین ریپازیتوری: `https://whatchlist.cc.cd/api/v1` — میتوانید مثالهای زیر را با جایگزین کردن `http://SERVER:8080` با این آدرس امتحان کنید.
+
 علاوه بر صفحه، سرور یک **API RESTful فقط-خواندنی** هم ارائه میدهد تا بقیه بتوانند همان دادهها را در برنامهها و اسکریپتهای خود استفاده کنند:
 
 ```bash
@@ -260,7 +312,14 @@ curl -s http://SERVER:8080/api/v1/ticker/BTCUSDT
 
 ## داده‌ها از کجا می‌آید
 
-همه‌چیز مستقیم از API فیوچرز بایننس و از داخل مرورگر گرفته می‌شود:
+روی سرور نصبشده، سرور پایتون بهطور پیوسته از API فیوچرز بایننس میخواند و یک snapshot مشترک آماده نگه میدارد؛ صفحه و API هر دو از همان snapshot میخوانند. روی GitHub Pages که سروری وجود ندارد، مرورگر مستقیم به بایننس متصل میشود:
+
+| محیط | منبع داده صفحه |
+|---|---|
+| سرور نصبشده | `/api/v1/tickers` + جریان زنده `/api/v1/stream` |
+| GitHub Pages | مستقیم از بایننس (با همان fallback دامنهها) |
+
+اندپوینتهای بایننس:
 
 | کار | اندپوینت |
 |---|---|

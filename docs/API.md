@@ -14,7 +14,7 @@
 - **CORS:** `Access-Control-Allow-Origin: *` — از مرورگر هم قابل فراخوانی است.
 - **قالب:** JSON با فیلد ثابت `ok`.
 
-> صفحه اصلی همچنان مستقیماً از بایننس میخواند؛ API لایهای جداگانه و کششده است که همان محاسبات را انجام میدهد. یعنی با قطع ارتباط بایننس، صفحه اصلی و API هر دو پیام خطا میگیرند، ولی بار روی بایننس بین همه کاربران تقسیم میشود.
+> **نسخه ۲.۵ و بعد از آن:** روی سرور نصبشده صفحه اصلی از همان API سرور میخواند (`/api/v1/tickers`) و بروزرسانیها را از `/api/v1/stream` میگیرد؛ بنابراین صفحه و API همیشه همان snapshot را نشان میدهند. مسیر مستقیم بایننس فقط روی GitHub Pages استفاده میشود، جایی که سروری برای میزبانی API وجود ندارد.
 
 ---
 
@@ -27,10 +27,12 @@
   "ok": true,
   "data": [ ... ],
   "meta": {
-    "version": "2.4.0",
+    "version": "2.5.0",
     "generated_at": "2026-11-19T13:05:00Z",
     "source": "binance-usdt-m-futures",
-    "upstream": "https://www.binance.com/fapi/v1"
+    "upstream": "https://www.binance.com/fapi/v1",
+    "generation": 803,
+    "last_update": 1795603892.88
   }
 }
 ```
@@ -65,7 +67,7 @@ curl -s http://localhost:8080/api/v1/health
   "ok": true,
   "data": {
     "status": "ok",
-    "version": "2.4.0",
+    "version": "2.5.0",
     "upstream": "https://www.binance.com/fapi/v1",
     "cache": {
       "symbols": { "age_seconds": 12.4, "ttl_seconds": 600 },
@@ -246,6 +248,22 @@ data: {"data":[...],"meta":{...}}
 
 > صفحه اصلی هم از همین مسیر میخواند: وقتی از سرور نصبشده سرو شود، ابتدا `/api/v1/meta` را امتحان میکند، سپس ردیفها را از `/api/v1/tickers` میگیرد و از `/api/v1/stream` بروزرسانی زنده دریافت میکند. روی GitHub Pages که APIای وجود ندارد، به مسیر مستقیم بایننس برمیگردد.
 
+### پشت nginx
+
+اگر از ریورسپروکسی nginx استفاده میکنید، مسیر استریم را حتماً بدون بافر تنظیم کنید وگرنه رویدادها با تأخیر میرسند:
+
+```nginx
+location /api/v1/stream {
+    proxy_pass http://127.0.0.1:18080;
+    proxy_http_version 1.1;
+    proxy_set_header Connection '';
+    proxy_buffering off;
+    proxy_cache off;
+    proxy_read_timeout 3600s;
+    add_header X-Accel-Buffering no;
+}
+```
+
 ---
 
 ## کدهای خطا
@@ -283,6 +301,20 @@ data: {"data":[...],"meta":{...}}
 تمام کلاینتها از **یک snapshot مشترک** روی سرور استفاده میکنند. یعنی ۱۰۰ کاربر همزمان تنها **یک** اسکن از بایننس ایجاد میکند، نه ۱۰۰ اسکن. سرور از لحظه بالا آمدن در پسزمینه دادهها را تازه نگه میدارد و نیازی ندارد کسی صفحه را باز کند تا شروع به کار کند. هر تغییری بلافاصله از طریق `/api/v1/stream` به صفحههای باز هم میرسد.
 
 TTL کندلها عمداً ۳ دقیقه است چون یک اسکن کامل ~۵۰۰ نماد ممکن است ۱–۲ دقیقه طول بکشد؛ اگر TTL کوتاهتر بود، قدیمیترین کندلها همان موقع تمام اسکن منقضی میشدند و هر درخواست اسکن تازهای را آغاز میکرد.
+
+### مانیتورینگ ساده
+
+برای مطمئن شدن اینکه سرویس زنده و داده تازه است، کافی است دو عدد را مقایسه کنید:
+
+```bash
+curl -s https://DOMAIN/api/v1/meta | python3 -c "import json,sys,time; m=json.load(sys.stdin)['meta']; print('generation=',m['generation'],'age_seconds=',round(time.time()-m['last_update']))"
+```
+
+`generation` باید هر چند ثانیه یک بار بالا برود و `age_seconds` معمولاً زیر ۱۰ ثانیه است. اگر generation ثابت ماند و age رشد کرد، لاگ سرویس را ببینید:
+
+```bash
+journalctl -u binance-screener -n 50 --no-pager
+```
 
 ---
 

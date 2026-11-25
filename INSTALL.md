@@ -165,6 +165,108 @@ curl -fsSL https://raw.githubusercontent.com/NigaByte031/binance-futures-screene
 
 ---
 
+## ۴.۱) سرورهای دارای پنل مدیریتی (CyberPanel / cPanel / aaPanel)
+
+اگر روی سرور شما از قبل nginx دیگری در حال سرویسدهی است، قبل از نصب ببینید کدام پوشه را میخواند:
+
+```bash
+sudo nginx -T | grep -E "include.*(sites-enabled|conf\.d|http\.d)"
+```
+
+اگر خروجی `sites-enabled` نشان دهد، فایلی که نصبکننده بهطور پیشفرض در `conf.d` مینویسد **بارگذاری نمیشود**. سرویس پایتون را نصب کنید و ریورسپروکسی را خودتان در کنار سایتهای موجود بسازید:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/NigaByte031/binance-futures-screener/main/install.sh \
+  | bash -s -- --port 18080 --bind 127.0.0.1 --domain screener.example.com --no-nginx --no-firewall
+```
+
+### مرحله ۱ — vhost موقت برای گرفتن گواهی
+
+وقتی گواهی هنوز وجود ندارد، nginx نمیتواند فایلی را که به آن اشاره میکند بارگذاری کند. اول فقط یک سرور HTTP بسازید:
+
+```nginx
+server {
+    listen 80;
+    listen [::]:80;
+    server_name screener.example.com;
+    location ^~ /.well-known/acme-challenge/ { root /var/www/certbot; }
+    location / { proxy_pass http://127.0.0.1:18080; }
+}
+```
+
+ذخیره کنید در `/etc/nginx/sites-enabled/screener.example.com.conf`، سپس:
+
+```bash
+sudo mkdir -p /var/www/certbot
+sudo nginx -t && sudo systemctl reload nginx
+sudo certbot certonly --webroot -w /var/www/certbot -d screener.example.com \
+  --agree-tos --no-eff-email -m you@example.com
+sudo certbot reconfigure --cert-name screener.example.com \
+  --deploy-hook "systemctl reload nginx"
+```
+
+### مرحله ۲ — vhost نهایی HTTPS
+
+همان فایل را با این محتوا جایگزین کنید. مسیر `/api/v1/stream` حتماً بدون بافر پراکسی میشود:
+
+```nginx
+server {
+    listen 80;
+    listen [::]:80;
+    server_name screener.example.com;
+    location ^~ /.well-known/acme-challenge/ { root /var/www/certbot; }
+    location / { return 301 https://screener.example.com$request_uri; }
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+    server_name screener.example.com;
+
+    ssl_certificate     /etc/letsencrypt/live/screener.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/screener.example.com/privkey.pem;
+
+    location = /healthz {
+        proxy_pass http://127.0.0.1:18080/healthz;
+        access_log off;
+    }
+
+    location /api/v1/stream {
+        proxy_pass http://127.0.0.1:18080;
+        proxy_http_version 1.1;
+        proxy_set_header Connection '';
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 3600s;
+        add_header X-Accel-Buffering no;
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:18080;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+```bash
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+### چک نهایی
+
+```bash
+curl -I http://screener.example.com          # باید 301 به https بدهد
+curl -s https://screener.example.com/api/v1/health
+curl -N --max-time 10 https://screener.example.com/api/v1/stream  # رویداد snapshot میآید
+```
+
+> **نکته درباره منو:** گزینه تغییر دامنه در `binance-screener` از همان نصبکننده استفاده میکند و فایل را در `conf.d` مینویسد. روی این سرورها بعد از تغییر دامنه از منو، حتماً vhost دستی بالا را هم با دامنه تازه هماهنگ کنید و دوباره `nginx -t && systemctl reload nginx` بزنید. سرویس پایتون و تمام سایتهای دیگر دستنخورده میمانند.
+
 ## ۵) حالت تعاملی — اگر می‌خواهید خودتان انتخاب کنید
 
 ```bash
@@ -272,7 +374,7 @@ curl -fsSL https://raw.githubusercontent.com/NigaByte031/binance-futures-screene
 | `/opt/binance-futures-screener/docs/API.md` | مرجع کامل API |
 | `/etc/systemd/system/binance-screener.service` | یونیت سرویس (روی Alpine: `/etc/init.d/binance-screener`) |
 | `/etc/binance-screener.install` | تنظیمات نصب، برای به‌روزرسانی بعدی |
-| `/etc/nginx/conf.d/binance-screener.conf` | فقط وقتی دامنه بدهید |
+| `/etc/nginx/conf.d/binance-screener.conf` | فقط وقتی دامنه بدهید؛ روی Alpine `http.d` و روی سرورهای پنلداری مثل CyberPanel طبق بخش ۴.۱ دستی در `sites-enabled` |
 | `/var/log/binance-screener-install.log` | لاگ کامل نصب |
 | `/usr/local/bin/binance-screener` | دستور منو (لینک `bfs` هم ساخته می‌شود) |
 | `/usr/local/lib/binance-screener/install.sh` | کپی نصب‌کننده که منو اجرا می‌کند |
@@ -291,6 +393,8 @@ curl -fsSL https://raw.githubusercontent.com/NigaByte031/binance-futures-screene
 | `502 Bad Gateway` (با nginx) | سرویس بالا نیست | `systemctl status binance-screener` |
 | لیست کوین‌ها خالی است | محدودیت منطقه‌ای بایننس (`451`) | سرور را از منطقه‌ی دیگر بگیرید |
 | گواهی SSL گرفته نشد | DNS آماده نیست یا پورت ۸۰ بسته است | DNS و پورت ۸۰ را چک کنید و دوباره اجرا کنید |
+| سایت با دامنه بالا نمیآید ولی سرویس سالم است | nginx پنل فقط `sites-enabled` را میخواند | طبق بخش ۴.۱ vhost دستی بسازید |
+| صفحه باز است ولی بروزرسانی زنده نمیشود | `/api/v1/stream` توسط nginx بافر شده | `proxy_buffering off` و `X-Accel-Buffering` را طبق بخش ۴.۱ اضافه کنید |
 | پورت اشغال است | سرویس دیگر روی ۸۰۸۰ | `--port 9000` بدهید یا خودکار انتخاب می‌شود |
 | `binance-screener: command not found` | نصب قدیمی، قبل از نسخه‌ی منو | یک بار دستور نصب را دوباره اجرا کنید |
 
@@ -324,5 +428,7 @@ docker compose up -d
 - [ ] `binance-screener` منو را باز می‌کند و گزینه‌ی `0` آن را می‌بندد
 - [ ] (اختیاری) دامنه وصل است و HTTPS کار می‌کند
 - [ ] (اختیاری) `/healthz` جواب `ok` می‌دهد
+- [ ] (اختیاری) `curl -N https://DOMAIN/api/v1/stream` رویداد `event: snapshot` نشان میدهد
+- [ ] (اختیاری) روی سرور پنلداری، vhost در `sites-enabled` است نه فقط `conf.d`
 
 اگر همه‌ی موارد بالا تیک خورد، نصب کامل و تمیز است.
